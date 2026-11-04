@@ -6,13 +6,30 @@ adapters. See [ARCHITECTURE.md](../ARCHITECTURE.md) for ownership boundaries.
 
 ## Python Workers
 
-Python-backed nodes execute in child processes; Pantograph does not embed one
-global Python interpreter. The worker entry points are:
+Python execution includes process adapters and embedded PyO3 inference. The
+selected PyTorch text path in `crates/inference/src/backend/pytorch.rs` executes
+in the linked PyO3 interpreter and loads `crates/inference/torch/worker.py` there.
+Its exact CPU text dependency profile observes distribution metadata in that
+same interpreter; the process executable overrides below do not select its
+execution or inventory environment. Distribution presence does not certify
+imports, versions, model compatibility or useful output. See the
+[public CPU text runbook](cpu-text-generation-workflow-probe.md) for actual
+execution and cold-reopen qualification.
+
+The embedded text owner retains producer completion through cancellation and
+cleanup. After joining, it retires that job without discarding the original
+stream result or a newer job. A legacy stop/unload that first observes a producer
+failure returns that failure before worker mutation; a subsequent explicit
+cleanup can reach the worker. Resource metadata clears only after the worker's
+cleanup acknowledgement. Selected execution joins the producer before its
+following lifecycle cleanup.
+
+Process-worker source entry points include:
 
 - `crates/inference/torch/worker.py`
 - `crates/inference/audio/worker.py`
 
-Interpreter selection uses, in order:
+For process adapters, interpreter selection uses, in order:
 
 1. `PANTOGRAPH_PYTHON_ENV_MAP_JSON`, an `env_id` to executable JSON object;
 2. `PANTOGRAPH_PYTHON_ENV_MAP_FILE`, containing the same mapping;

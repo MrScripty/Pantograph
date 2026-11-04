@@ -6014,15 +6014,56 @@ async fn owned_text_job_error_and_panic_never_publish_success() {
                 Err(BackendError::NotRunning("controlled worker failure".into()))
             })
             .unwrap();
+        // Lifecycle observation retires the failed job, while its stream keeps
+        // the producer's exact terminal outcome independently.
+        let lifecycle_error = jobs.drain(false).await.unwrap_err();
+        jobs.drain(false).await.unwrap();
+        let mut successor = jobs.spawn(|_| Ok(())).unwrap();
         let error = stream.next().await.unwrap().unwrap_err();
+        assert_eq!(error.to_string(), lifecycle_error.to_string());
         if panic {
             assert!(matches!(error, BackendError::Inference(_)));
         } else {
             assert!(matches!(error, BackendError::NotRunning(_)));
         }
         assert!(stream.next().await.is_none());
-        assert!(jobs.drain(false).await.is_err());
+        assert!(successor.next().await.unwrap().unwrap().done);
+        jobs.drain(false).await.unwrap();
     }
+}
+
+#[tokio::test]
+async fn owned_text_job_stale_drain_preserves_active_successor() {
+    use futures_util::{FutureExt, StreamExt};
+    let jobs = super::pytorch_text_job::TextJobs::default();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let mut stream = jobs
+        .spawn(move |_| {
+            release_rx.recv().unwrap();
+            Ok(())
+        })
+        .unwrap();
+    let drain = jobs.drain(false);
+    tokio::pin!(drain);
+    assert!(drain.as_mut().now_or_never().is_none());
+    release_tx.send(()).unwrap();
+    assert!(stream.next().await.unwrap().unwrap().done);
+
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let mut successor = jobs
+        .spawn(move |_| {
+            release_rx.recv().unwrap();
+            Ok(())
+        })
+        .unwrap();
+    drain.await.unwrap();
+    assert!(matches!(
+        jobs.spawn(|_| Ok(())),
+        Err(BackendError::Inference(message)) if message.contains("occupied")
+    ));
+    release_tx.send(()).unwrap();
+    assert!(successor.next().await.unwrap().unwrap().done);
+    jobs.drain(false).await.unwrap();
 }
 
 struct ControlledTextBackend {
@@ -6198,7 +6239,15 @@ impl TextIteratorBarrier {
 async fn production_text_iterator_drains_before_successful_load_and_unload() {
     let _python_fixture = super::PYTHON_TEST_LOCK.lock().await;
     use futures_util::{FutureExt, StreamExt};
-    for action in ["load", "unload", "stop", "failed_restart", "failed_load"] {
+    for action in [
+        "load",
+        "unload",
+        "stop",
+        "failed_restart",
+        "failed_load",
+        "failed_text_stop",
+        "failed_text_unload",
+    ] {
         let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
         let (release_tx, release_rx) = std::sync::mpsc::channel();
         let saved = Python::with_gil(|py| {
@@ -6273,12 +6322,17 @@ def shutdown_worker_from_envelope(envelope):
         });
         let mut backend = PyTorchBackend::new();
         backend.ready = true;
-        if action == "failed_restart" || action == "failed_load" {
-            if action == "failed_restart" {
-                assert_failed_text_restart_preserves_residency(backend, entered_rx, release_tx)
-                    .await;
-            } else {
-                assert_effectful_load_failure_clears_residency(backend).await;
+        if action.starts_with("failed_") {
+            match action {
+                "failed_restart" => {
+                    assert_failed_text_restart_preserves_residency(backend, entered_rx, release_tx)
+                        .await;
+                }
+                "failed_load" => assert_effectful_load_failure_clears_residency(backend).await,
+                _ => {
+                    assert_failed_text_cleanup_retries(backend, entered_rx, release_tx, action)
+                        .await;
+                }
             }
             Python::with_gil(|py| {
                 let worker = super::pytorch_worker::worker_module(py).unwrap();
@@ -6346,6 +6400,75 @@ def shutdown_worker_from_envelope(envelope):
             worker.delattr("_rt03_barrier").unwrap();
         });
     }
+}
+
+async fn assert_failed_text_cleanup_retries(
+    mut backend: PyTorchBackend,
+    entered: tokio::sync::oneshot::Receiver<()>,
+    release: std::sync::mpsc::Sender<()>,
+    action: &str,
+) {
+    use futures_util::StreamExt;
+    backend.loaded_model = Some(LoadedModelInfo {
+        model_path: "controlled-model".into(),
+        model_type: "standard".into(),
+        device: inference_device_id("cpu"),
+    });
+    backend.resident_allocation_uncertain = true;
+    Python::with_gil(|py| {
+        super::pytorch_worker::worker_module(py)
+            .unwrap()
+            .setattr("_rt03_fail_text", true)
+            .unwrap();
+    });
+    let mut stream = backend.generate_stream("hello".into(), None, 8, 0.7, 1.0, None);
+    entered.await.unwrap();
+    release.send(()).unwrap();
+    assert!(stream.next().await.unwrap().is_ok());
+    let producer_error = stream.next().await.unwrap().unwrap_err();
+    assert!(producer_error
+        .to_string()
+        .contains("controlled text producer failure"));
+
+    let stop = action == "failed_text_stop";
+    let first = if stop {
+        backend.stop().await
+    } else {
+        backend.unload_model().await
+    };
+    assert_eq!(first.unwrap_err().to_string(), producer_error.to_string());
+    assert!(backend.ready);
+    assert!(backend.loaded_model.is_some());
+    assert!(backend.resident_allocation_uncertain);
+    Python::with_gil(|py| {
+        let effects = super::pytorch_worker::worker_module(py)
+            .unwrap()
+            .getattr("_rt03_effects")
+            .unwrap()
+            .extract::<Vec<String>>()
+            .unwrap();
+        assert!(effects.is_empty());
+    });
+
+    // The failure is reported once to the lifecycle owner. Explicit cleanup
+    // then reaches the worker and clears metadata only after acknowledgment.
+    if stop {
+        backend.stop().await.unwrap();
+        assert!(!backend.ready);
+    } else {
+        backend.unload_model().await.unwrap();
+    }
+    assert!(backend.loaded_model.is_none());
+    assert!(!backend.resident_allocation_uncertain);
+    Python::with_gil(|py| {
+        let effects = super::pytorch_worker::worker_module(py)
+            .unwrap()
+            .getattr("_rt03_effects")
+            .unwrap()
+            .extract::<Vec<String>>()
+            .unwrap();
+        assert_eq!(effects, vec![if stop { "stop" } else { "unload" }]);
+    });
 }
 
 async fn assert_failed_text_restart_preserves_residency(
@@ -6739,14 +6862,19 @@ def shutdown_worker_from_envelope(envelope):
                 "{message}"
             );
         }
-        let replaced = replacement.await;
-        if mode == "error" {
-            assert!(replaced.is_err());
-        } else {
-            replaced.unwrap();
-        }
+        // The selected execution already joined and reported its failed job.
+        // Replacement must reach shutdown instead of replaying that old error.
+        replacement.await.unwrap();
         Python::with_gil(|py| {
             let worker = super::pytorch_worker::worker_module(py).unwrap();
+            assert_eq!(
+                worker
+                    .getattr("_rt02_effects")
+                    .unwrap()
+                    .extract::<Vec<String>>()
+                    .unwrap(),
+                vec!["load", "stop"]
+            );
             for (name, value) in saved {
                 worker.setattr(name, value).unwrap();
             }

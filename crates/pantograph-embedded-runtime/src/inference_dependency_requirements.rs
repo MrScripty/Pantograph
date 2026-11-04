@@ -18,6 +18,22 @@ pub(crate) const NATIVE_BINDINGS: [&str; 2] = [
 ];
 
 fn supported_request(request: &DependencyEnvironmentRequest) -> bool {
+    supported_profile_request(
+        request,
+        "embedding",
+        "candle",
+        &NATIVE_BINDINGS.map(String::from),
+        &native_environment_ref(),
+    )
+}
+
+pub(crate) fn supported_profile_request(
+    request: &DependencyEnvironmentRequest,
+    task: &str,
+    runtime: &str,
+    bindings: &[String],
+    environment: &DependencyEnvironmentRef,
+) -> bool {
     let identity = &request.identity_key;
     let planning = &request.planning_request;
     let platform = DependencyPlanningPlatformContext::from_os_arch(
@@ -26,7 +42,7 @@ fn supported_request(request: &DependencyEnvironmentRequest) -> bool {
     )
     .ok();
     let caller = &planning.caller_context;
-    identity.task_id.as_str() == "embedding"
+    identity.task_id.as_str() == task
         && identity.task_type.is_none()
         && identity.expected_artifact_kind.is_none()
         && identity
@@ -34,7 +50,7 @@ fn supported_request(request: &DependencyEnvironmentRequest) -> bool {
             .requested_runtime_id
             .as_ref()
             .map(|id| id.as_str())
-            == Some("candle")
+            == Some(runtime)
         && identity
             .scheduler_intent
             .requested_device_id
@@ -56,14 +72,14 @@ fn supported_request(request: &DependencyEnvironmentRequest) -> bool {
             .is_none_or(|value| value.len() <= 512)
         && identity.model_ref.selected_artifact_path.is_none()
         && identity.model_ref.migration_diagnostics.is_empty()
-        && identity.selected_binding_ids.len() <= 2
+        && identity.selected_binding_ids.len() <= bindings.len()
         && (identity.selected_binding_ids.is_empty()
-            || (identity.selected_binding_ids.len() == 2
-                && NATIVE_BINDINGS.iter().all(|id| {
+            || (identity.selected_binding_ids.len() == bindings.len()
+                && bindings.iter().all(|id| {
                     identity
                         .selected_binding_ids
                         .iter()
-                        .any(|binding| binding.as_str() == *id)
+                        .any(|binding| binding.as_str() == id)
                 })))
         && caller
             .source_node_type
@@ -86,7 +102,7 @@ fn supported_request(request: &DependencyEnvironmentRequest) -> bool {
         && request
             .environment_ref
             .as_ref()
-            .is_none_or(|reference| reference == &native_environment_ref())
+            .is_none_or(|reference| reference == environment)
 }
 
 pub(crate) fn native_environment_ref() -> DependencyEnvironmentRef {
@@ -207,7 +223,7 @@ pub(crate) async fn resolve_native_candle_requirements(
         .platform_key
         .as_str();
     if !packages
-        .has_no_declared_dependencies(&request.identity_key.model_ref.model_id, platform)
+        .has_no_declared_dependencies(&request.identity_key.model_ref.model_id, platform, "candle")
         .await
         .map_err(fail)?
     {

@@ -2,6 +2,12 @@
 
 **Plan status:** `Active`
 
+**Text integration continuation (2026-10-21):** The delegated
+[CPU text readiness/integration plan](../text-generation-readiness/plan.md)
+owns current-main readiness/terminal composition, failed-producer recovery and
+same-version cold reopen. Its bounded untrained CPU evidence leaves trained T3
+blocked and does not close this plan's desktop, text-to-image or broader roadmap.
+
 **CPU scheduler policy authority (2026-10-12):** The user separately authorized
 the phased [CPU scheduler plan](../cpu-scheduler/plan.md). It owns current
 completion-ranking, bounded ready-frontier, residency-policy, app-fairness and

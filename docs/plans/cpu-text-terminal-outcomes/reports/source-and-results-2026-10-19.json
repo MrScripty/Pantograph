@@ -1,0 +1,278 @@
+{
+  "source_checkpoint": "511374122d82a07d953baf322bbd137a5002bad7",
+  "frozen_pr80_base": "040969de5245001e0c13d96caa46fb86b2c1df3a",
+  "main": "4aec0d5c4927a6af2832d40e224be5c2136fc9ef",
+  "standards_revision": "0fc92a24279f3a4574c80af0a2f31ea347a21597",
+  "clean_checkout": true,
+  "source_sha256": {
+    "crates/pantograph-workflow-service/src/workflow/runtime_branch_run_finalization.rs": "be8dce090f87b4cc09ed5055cbda0ce77d17ea21ee990fceb28b4e0ae6098393",
+    "crates/pantograph-embedded-runtime/examples/cpu_text_generation_workflow_probe.rs": "d6139d555d2a0eb724a7da60af9a24cbb8deb75de94cb01ed831d5a3990ce53b",
+    "crates/pantograph-embedded-runtime/Cargo.toml": "58ea35050482640782c16cce870d7debae3d2c9e31fd551183e1bedeb6851e03",
+    "scripts/qualify-cpu-text-workflow.sh": "850d901116d1310b89eddb47b1ee3840961e53a592ed6124aac3685ec110ede6",
+    ".github/workflows/cpu-text-integration.yml": "15b59d51dc098b4f99d7c175b6252f1b0714e5e9112763a030e18785a3522516"
+  },
+  "exact_source_script": {
+    "command": "bash scripts/qualify-cpu-text-workflow.sh 511374122d82a07d953baf322bbd137a5002bad7 /workspace/text-t4-evidence/exact-checkpoint",
+    "exit": 0
+  },
+  "checks": {
+    "focused_finalization": {
+      "passed": 8,
+      "exit": 0
+    },
+    "workflow_library": {
+      "passed": 992,
+      "exit": 0
+    },
+    "embedded_library": {
+      "passed": 619,
+      "ignored": 3,
+      "exit": 0
+    },
+    "clippy_owners_lib_tests_example": {
+      "warnings_denied": true,
+      "exit": 0
+    },
+    "affected_rustfmt": {
+      "exit": 0
+    },
+    "bash_syntax": {
+      "exit": 0
+    },
+    "staged_traceability": {
+      "exit": 0
+    },
+    "whitespace": {
+      "exit": 0
+    }
+  },
+  "observations": {
+    "generate": {
+      "cleanup_ok": true,
+      "diagnostics_may_be_truncated": false,
+      "integration_passed": true,
+      "limits": {
+        "device": "cpu",
+        "max_loaded_sessions": 1,
+        "max_model_bytes": 629145600,
+        "max_new_tokens": 24,
+        "temperature": 0.0,
+        "timeout_ms": 60000
+      },
+      "output": {
+        "public_result_projection_qualified": true,
+        "runtime_effect_observed": true,
+        "scope": "native_cpu_text_integration",
+        "text": ":::eeeeeeeeeeeeeeeeeeeee"
+      },
+      "probe_passed": true,
+      "public_result_projection_qualified": true,
+      "runtime_effect_observed": true,
+      "scenario": "generate",
+      "shutdown_ok": true,
+      "stage": "output_verified",
+      "synthetic": true,
+      "t3_qualified": false
+    },
+    "failure": {
+      "cleanup_ok": true,
+      "diagnostics_may_be_truncated": false,
+      "integration_passed": true,
+      "limits": {
+        "device": "cpu",
+        "max_loaded_sessions": 1,
+        "max_model_bytes": 629145600,
+        "max_new_tokens": 24,
+        "temperature": 0.0,
+        "timeout_ms": 60000
+      },
+      "output": {
+        "observation": {
+          "events": [
+            {
+              "bucket_id": null,
+              "client_id": null,
+              "client_session_id": null,
+              "event_id": "devent_51560d2264514ecfbe2a4d1d437c0874",
+              "event_kind": "scheduler_task_attempt_lifecycle_changed",
+              "event_seq": 7,
+              "model_id": null,
+              "model_version": null,
+              "node_id": "infer",
+              "node_type": "llm-inference",
+              "node_version": null,
+              "occurred_at_ms": 1792453238497,
+              "payload_hash": "diagnostic-event-blake3:77d7239238ada36c4472d0136cd79e7dc03745ec94d664448e4511a730c302f5",
+              "payload_json": "{\"payload_type\":\"scheduler_task_attempt_lifecycle_changed\",\"scheduler_task_id\":\"infer\",\"scheduler_attempt_id\":\"scheduler-task-attempt.803a9f23-9c0c-4989-8942-1504530d7754\",\"execution_class\":\"runtime\",\"transition\":\"failed\",\"started_at_ms\":1792453230522,\"ended_at_ms\":1792453238497,\"duration_ms\":7975,\"selected_runtime_id\":\"pytorch\",\"selected_runtime_variant_id\":\"pytorch.cpu\",\"selected_device_class\":null,\"selected_device_id\":\"cpu\",\"selected_network_node_id\":null,\"reservation_id\":\"runtime-registry.1\",\"reason\":\"scheduler runtime task result failed\",\"error_summary\":\"embedded runtime-host text gateway execution failed: Backend error: Startup failed: PyTorch worker pytorch_worker_model_load_failed for workflow-runtime-task:run_ff2c01dc-f93f-4a5f-bf55-4d9d1659fbaa:infer: Error while deserializing header: header too large\"}",
+              "payload_ref": null,
+              "payload_size_bytes": 824,
+              "privacy_class": "system_metadata",
+              "recorded_at_ms": 1792453238497,
+              "retention_class": "audit_metadata",
+              "retention_policy_id": null,
+              "runtime_id": "pytorch",
+              "runtime_version": null,
+              "scheduler_policy_id": "priority_then_fifo",
+              "schema_version": 1,
+              "source_component": "scheduler",
+              "source_instance_id": "workflow-session-scheduler",
+              "workflow_id": "cpu-text-probe",
+              "workflow_run_id": "run_ff2c01dc-f93f-4a5f-bf55-4d9d1659fbaa",
+              "workflow_semantic_version": null,
+              "workflow_version_id": null
+            }
+          ],
+          "runtime_effect_observed": true,
+          "workflow_run_id": "run_ff2c01dc-f93f-4a5f-bf55-4d9d1659fbaa"
+        },
+        "public_error": {
+          "code": "InternalError",
+          "message": "internal_error: scheduler task 'infer' failed (runtime_host.execution_failed): embedded runtime-host text gateway execution failed: Backend error: Startup failed: PyTorch worker pytorch_worker_model_load_failed for workflow-runtime-task:run_ff2c01dc-f93f-4a5f-bf55-4d9d1659fbaa:infer: Error while deserializing header: header too large",
+          "phase": "None"
+        },
+        "public_result_projection_qualified": true,
+        "runtime_effect_observed": true,
+        "scope": "public_cpu_text_terminal_integration"
+      },
+      "probe_passed": true,
+      "public_result_projection_qualified": true,
+      "runtime_effect_observed": true,
+      "scenario": "failure",
+      "shutdown_ok": true,
+      "stage": "scheduler_dispatch",
+      "synthetic": true,
+      "t3_qualified": false
+    },
+    "cancel": {
+      "cleanup_ok": true,
+      "diagnostics_may_be_truncated": false,
+      "integration_passed": true,
+      "limits": {
+        "device": "cpu",
+        "max_loaded_sessions": 1,
+        "max_model_bytes": 629145600,
+        "max_new_tokens": 24,
+        "temperature": 0.0,
+        "timeout_ms": 60000
+      },
+      "output": {
+        "observation": {
+          "events": [
+            {
+              "bucket_id": null,
+              "client_id": null,
+              "client_session_id": null,
+              "event_id": "devent_c921b5fdbc2b49de8f66088321916d07",
+              "event_kind": "node_execution_status",
+              "event_seq": 6,
+              "model_id": "llm/qualification/local-text",
+              "model_version": null,
+              "node_id": "infer",
+              "node_type": null,
+              "node_version": null,
+              "occurred_at_ms": 1792453240064,
+              "payload_hash": "diagnostic-event-blake3:02092662821bdcfab698dddb2155b98b8d91679d5aa326b7571610a6a6d6328c",
+              "payload_json": "{\"payload_type\":\"node_execution_status\",\"status\":\"cancelled\",\"started_at_ms\":1792453240064,\"completed_at_ms\":1792453240064,\"duration_ms\":0,\"error\":\"runtime-host cancellation or shutdown acknowledged\",\"task_id\":\"text_generation\"}",
+              "payload_ref": null,
+              "payload_size_bytes": 228,
+              "privacy_class": "system_metadata",
+              "recorded_at_ms": 1792453240064,
+              "retention_class": "audit_metadata",
+              "retention_policy_id": null,
+              "runtime_id": "pytorch",
+              "runtime_version": null,
+              "scheduler_policy_id": null,
+              "schema_version": 1,
+              "source_component": "node_execution",
+              "source_instance_id": "embedded-runtime-host",
+              "workflow_id": "cpu-text-probe",
+              "workflow_run_id": "run_a0ff4e26-338f-4120-84c3-ff6b5d380818",
+              "workflow_semantic_version": null,
+              "workflow_version_id": null
+            },
+            {
+              "bucket_id": null,
+              "client_id": null,
+              "client_session_id": null,
+              "event_id": "devent_17237cfb7b7a42ebbf8245adbdb75351",
+              "event_kind": "scheduler_task_attempt_lifecycle_changed",
+              "event_seq": 7,
+              "model_id": null,
+              "model_version": null,
+              "node_id": "infer",
+              "node_type": "llm-inference",
+              "node_version": null,
+              "occurred_at_ms": 1792453240065,
+              "payload_hash": "diagnostic-event-blake3:e78de12e94ad1854b65d6f228c20da25c38936d7a2b7b5f2f5ff1a20b2444bef",
+              "payload_json": "{\"payload_type\":\"scheduler_task_attempt_lifecycle_changed\",\"scheduler_task_id\":\"infer\",\"scheduler_attempt_id\":\"scheduler-task-attempt.19a1904f-2b85-4f67-b9df-40f40824793e\",\"execution_class\":\"runtime\",\"transition\":\"failed\",\"started_at_ms\":1792453240061,\"ended_at_ms\":1792453240065,\"duration_ms\":4,\"selected_runtime_id\":\"pytorch\",\"selected_runtime_variant_id\":\"pytorch.cpu\",\"selected_device_class\":null,\"selected_device_id\":\"cpu\",\"selected_network_node_id\":null,\"reservation_id\":\"runtime-registry.1\",\"reason\":\"scheduler runtime task result failed\",\"error_summary\":\"embedded runtime-host execution cancelled before completion: bounded CPU text probe cancellation\"}",
+              "payload_ref": null,
+              "payload_size_bytes": 661,
+              "privacy_class": "system_metadata",
+              "recorded_at_ms": 1792453240065,
+              "retention_class": "audit_metadata",
+              "retention_policy_id": null,
+              "runtime_id": "pytorch",
+              "runtime_version": null,
+              "scheduler_policy_id": "priority_then_fifo",
+              "schema_version": 1,
+              "source_component": "scheduler",
+              "source_instance_id": "workflow-session-scheduler",
+              "workflow_id": "cpu-text-probe",
+              "workflow_run_id": "run_a0ff4e26-338f-4120-84c3-ff6b5d380818",
+              "workflow_semantic_version": null,
+              "workflow_version_id": null
+            }
+          ],
+          "runtime_effect_observed": true,
+          "workflow_run_id": "run_a0ff4e26-338f-4120-84c3-ff6b5d380818"
+        },
+        "public_error": {
+          "code": "Cancelled",
+          "message": "cancelled: scheduler task 'infer' failed (runtime_host.cancellation_requested): embedded runtime-host execution cancelled before completion: bounded CPU text probe cancellation",
+          "phase": "None"
+        },
+        "public_result_projection_qualified": true,
+        "runtime_effect_observed": true,
+        "scope": "public_cpu_text_terminal_integration"
+      },
+      "probe_passed": true,
+      "public_result_projection_qualified": true,
+      "runtime_effect_observed": true,
+      "scenario": "cancel",
+      "shutdown_ok": true,
+      "stage": "scheduler_dispatch",
+      "synthetic": true,
+      "t3_qualified": false
+    }
+  },
+  "acceptance": {
+    "F1": "satisfied",
+    "F2": "satisfied",
+    "F3": "satisfied",
+    "T4": "satisfied for bounded public terminal projection on untrained fixture",
+    "T3": "blocked: verified licensed trained model asset set unavailable; prior official host proxy CONNECT HTTP403"
+  },
+  "independent_review": {
+    "reviewer": "text_review",
+    "model": "GPT-6.1 Sol",
+    "reasoning": "High",
+    "source": "admitted; no material findings",
+    "final_evidence": "admitted; no material findings",
+    "qualification_source": "511374122d82a07d953baf322bbd137a5002bad7"
+  },
+  "scope_limits": [
+    "CPU/headless, one model session, max24 newtokens, no remote model code",
+    "early active task cancellation, not after first token",
+    "untrained fixture; no trained quality/GPU/native UI/performance/text-to-image qualification"
+  ],
+  "retained_worktree": {
+    "path": "/workspace/pantograph-text-t4",
+    "branch": "fix/cpu-text-terminal-outcomes-2026-10-19",
+    "purpose": "focused T4 review and parent-coordinated integration; blocked trained-model follow-up",
+    "owner": "CPU text delegate",
+    "target": "qualify/cpu-text-generation-2026-10-19",
+    "commit_disposition": "retained",
+    "outcome": "retained-protected",
+    "retirement": "parent coordination after acceptance, no rewrite/deletion"
+  }
+}

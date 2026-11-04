@@ -1,0 +1,375 @@
+{
+  "source": "3de398277e3619fb282766c4ff794c60a2c0d4bd",
+  "base": "9ec7e7f3f4a0db1a1123bdc5504f76f4b79322f6",
+  "source_tree": "a45b03b46275d96174bafea394df4c35e2901137",
+  "pr": "https://github.com/MrScripty/Pantograph/pull/92",
+  "integration": {
+    "PR75_original": "2f1e38fd846ae089b47c5a2ba4dccf1fcf892cc1",
+    "PR75_reused_in_PR80": "7a78625b",
+    "PR80": "040969de5245001e0c13d96caa46fb86b2c1df3a",
+    "PR82": "3ab04849e044e319502750ccfc6ed30346d62da4",
+    "normal_merge": "15b11d48ecb4b7867bc64c3ee0fe9bbc7611454d",
+    "excluded": [
+      "PR84",
+      "PR79",
+      "custom-node ABI",
+      "registry implementation",
+      "NodeLab",
+      "tool-loop orchestration"
+    ]
+  },
+  "native_tests": {
+    "command": "cargo test --locked -p inference -p pantograph-embedded-runtime -p pantograph-workflow-service --features pantograph-embedded-runtime/backend-pytorch,pantograph-embedded-runtime/host-dependency-inventory --lib",
+    "exit_code": 0,
+    "inference": {
+      "passed": 874,
+      "ignored": 0
+    },
+    "embedded_runtime": {
+      "passed": 643,
+      "ignored": 4
+    },
+    "workflow_service": {
+      "passed": 1052,
+      "ignored": 0
+    },
+    "total_passed": 2569,
+    "isolation": "Supported PUMAS_REGISTRY_DB_PATH and XDG roots under the owned cache; no home write retried"
+  },
+  "public_probe": {
+    "command": "bash scripts/qualify-cpu-text-workflow.sh 3de398277e3619fb282766c4ff794c60a2c0d4bd NEW_ABSOLUTE_EVIDENCE_ROOT",
+    "exit_code": 0,
+    "results": {
+      "generate": {
+        "cleanup_ok": true,
+        "cold_reopen_qualified": false,
+        "diagnostics_may_be_truncated": false,
+        "integration_passed": true,
+        "limits": {
+          "device": "cpu",
+          "max_loaded_sessions": 1,
+          "max_model_bytes": 629145600,
+          "max_new_tokens": 24,
+          "temperature": 0.0,
+          "timeout_ms": 60000
+        },
+        "output": {
+          "public_result_projection_qualified": true,
+          "runtime_effect_observed": true,
+          "scope": "native_cpu_text_integration",
+          "text": ":::eeeeeeeeeeeeeeeeeeeee"
+        },
+        "probe_passed": true,
+        "process_id": 18639,
+        "process_marker": "42ef1ffa-a825-42a3-9eed-be1c62188201",
+        "public_result_projection_qualified": true,
+        "runtime_effect_observed": true,
+        "scenario": "generate",
+        "shutdown_ok": true,
+        "stage": "output_verified",
+        "synthetic": true,
+        "t3_qualified": false
+      },
+      "failure": {
+        "cleanup_ok": true,
+        "cold_reopen_qualified": false,
+        "diagnostics_may_be_truncated": false,
+        "integration_passed": true,
+        "limits": {
+          "device": "cpu",
+          "max_loaded_sessions": 1,
+          "max_model_bytes": 629145600,
+          "max_new_tokens": 24,
+          "temperature": 0.0,
+          "timeout_ms": 60000
+        },
+        "output": {
+          "observation": {
+            "events": [
+              {
+                "bucket_id": null,
+                "client_id": null,
+                "client_session_id": null,
+                "event_id": "devent_794b32d0c2a945c8964841add7de0dc7",
+                "event_kind": "scheduler_task_attempt_lifecycle_changed",
+                "event_seq": 7,
+                "model_id": null,
+                "model_version": null,
+                "node_id": "infer",
+                "node_type": "llm-inference",
+                "node_version": null,
+                "occurred_at_ms": 1792611508006,
+                "payload_hash": "diagnostic-event-blake3:0d6520f15634f617968325ca9910b6d646e240a9519eaea487862794e62260dd",
+                "payload_json": "{\"payload_type\":\"scheduler_task_attempt_lifecycle_changed\",\"scheduler_task_id\":\"infer\",\"scheduler_attempt_id\":\"scheduler-task-attempt.04554409-41a3-4b2b-b950-8a82a4d096a1\",\"execution_class\":\"runtime\",\"transition\":\"failed\",\"started_at_ms\":1792611495678,\"ended_at_ms\":1792611508006,\"duration_ms\":12328,\"selected_runtime_id\":\"pytorch\",\"selected_runtime_variant_id\":\"pytorch.cpu\",\"selected_device_class\":null,\"selected_device_id\":\"cpu\",\"selected_network_node_id\":null,\"reservation_id\":\"runtime-registry.1\",\"reason\":\"scheduler runtime task result failed\",\"error_summary\":\"embedded runtime-host text gateway execution failed: Backend error: Startup failed: PyTorch worker pytorch_worker_model_load_failed for workflow-runtime-task:run_2aa51f92-b1ee-4405-a422-936355ec8ac7:infer: Error while deserializing header: header too large\"}",
+                "payload_ref": null,
+                "payload_size_bytes": 825,
+                "privacy_class": "system_metadata",
+                "recorded_at_ms": 1792611508006,
+                "retention_class": "audit_metadata",
+                "retention_policy_id": null,
+                "runtime_id": "pytorch",
+                "runtime_version": null,
+                "scheduler_policy_id": "priority_then_fifo",
+                "schema_version": 1,
+                "source_component": "scheduler",
+                "source_instance_id": "workflow-session-scheduler",
+                "workflow_id": "cpu-text-probe",
+                "workflow_run_id": "run_2aa51f92-b1ee-4405-a422-936355ec8ac7",
+                "workflow_semantic_version": null,
+                "workflow_version_id": null
+              }
+            ],
+            "runtime_effect_observed": true,
+            "workflow_run_id": "run_2aa51f92-b1ee-4405-a422-936355ec8ac7"
+          },
+          "public_error": {
+            "code": "InternalError",
+            "message": "internal_error: scheduler task 'infer' failed (runtime_host.execution_failed): embedded runtime-host text gateway execution failed: Backend error: Startup failed: PyTorch worker pytorch_worker_model_load_failed for workflow-runtime-task:run_2aa51f92-b1ee-4405-a422-936355ec8ac7:infer: Error while deserializing header: header too large",
+            "phase": "None"
+          },
+          "public_result_projection_qualified": true,
+          "runtime_effect_observed": true,
+          "scope": "public_cpu_text_terminal_integration"
+        },
+        "probe_passed": true,
+        "process_id": 18665,
+        "process_marker": "0ddc7628-f13d-4a05-b89f-203b943b25af",
+        "public_result_projection_qualified": true,
+        "runtime_effect_observed": true,
+        "scenario": "failure",
+        "shutdown_ok": true,
+        "stage": "scheduler_dispatch",
+        "synthetic": true,
+        "t3_qualified": false
+      },
+      "cancel": {
+        "cleanup_ok": true,
+        "cold_reopen_qualified": false,
+        "diagnostics_may_be_truncated": false,
+        "integration_passed": true,
+        "limits": {
+          "device": "cpu",
+          "max_loaded_sessions": 1,
+          "max_model_bytes": 629145600,
+          "max_new_tokens": 24,
+          "temperature": 0.0,
+          "timeout_ms": 60000
+        },
+        "output": {
+          "observation": {
+            "events": [
+              {
+                "bucket_id": null,
+                "client_id": null,
+                "client_session_id": null,
+                "event_id": "devent_8f2c571d31bc45bd9ce7e3c1d025e581",
+                "event_kind": "node_execution_status",
+                "event_seq": 6,
+                "model_id": "llm/qualification/local-text",
+                "model_version": null,
+                "node_id": "infer",
+                "node_type": null,
+                "node_version": null,
+                "occurred_at_ms": 1792611510133,
+                "payload_hash": "diagnostic-event-blake3:ce4e17ade731026ffc03b03e7e11d9f99bbf2b10213b280d3a48d172c3c77deb",
+                "payload_json": "{\"payload_type\":\"node_execution_status\",\"status\":\"cancelled\",\"started_at_ms\":1792611510133,\"completed_at_ms\":1792611510133,\"duration_ms\":0,\"error\":\"runtime-host cancellation or shutdown acknowledged\",\"task_id\":\"text_generation\"}",
+                "payload_ref": null,
+                "payload_size_bytes": 228,
+                "privacy_class": "system_metadata",
+                "recorded_at_ms": 1792611510134,
+                "retention_class": "audit_metadata",
+                "retention_policy_id": null,
+                "runtime_id": "pytorch",
+                "runtime_version": null,
+                "scheduler_policy_id": null,
+                "schema_version": 1,
+                "source_component": "node_execution",
+                "source_instance_id": "embedded-runtime-host",
+                "workflow_id": "cpu-text-probe",
+                "workflow_run_id": "run_13bbb4a9-a43b-4a69-ae5b-b80d945d2501",
+                "workflow_semantic_version": null,
+                "workflow_version_id": null
+              },
+              {
+                "bucket_id": null,
+                "client_id": null,
+                "client_session_id": null,
+                "event_id": "devent_9506691198df4ec5a57c36213e610669",
+                "event_kind": "scheduler_task_attempt_lifecycle_changed",
+                "event_seq": 7,
+                "model_id": null,
+                "model_version": null,
+                "node_id": "infer",
+                "node_type": "llm-inference",
+                "node_version": null,
+                "occurred_at_ms": 1792611510135,
+                "payload_hash": "diagnostic-event-blake3:a4db14f55e66b7c02b71c5a9cd08e5e6c38d0c8f1cf6d335b2a995f518bb1ccf",
+                "payload_json": "{\"payload_type\":\"scheduler_task_attempt_lifecycle_changed\",\"scheduler_task_id\":\"infer\",\"scheduler_attempt_id\":\"scheduler-task-attempt.57a0f080-a4c7-49f8-9330-9ff2e0763ae7\",\"execution_class\":\"runtime\",\"transition\":\"failed\",\"started_at_ms\":1792611510131,\"ended_at_ms\":1792611510135,\"duration_ms\":4,\"selected_runtime_id\":\"pytorch\",\"selected_runtime_variant_id\":\"pytorch.cpu\",\"selected_device_class\":null,\"selected_device_id\":\"cpu\",\"selected_network_node_id\":null,\"reservation_id\":\"runtime-registry.1\",\"reason\":\"scheduler runtime task result failed\",\"error_summary\":\"embedded runtime-host execution cancelled before completion: bounded CPU text probe cancellation\"}",
+                "payload_ref": null,
+                "payload_size_bytes": 661,
+                "privacy_class": "system_metadata",
+                "recorded_at_ms": 1792611510136,
+                "retention_class": "audit_metadata",
+                "retention_policy_id": null,
+                "runtime_id": "pytorch",
+                "runtime_version": null,
+                "scheduler_policy_id": "priority_then_fifo",
+                "schema_version": 1,
+                "source_component": "scheduler",
+                "source_instance_id": "workflow-session-scheduler",
+                "workflow_id": "cpu-text-probe",
+                "workflow_run_id": "run_13bbb4a9-a43b-4a69-ae5b-b80d945d2501",
+                "workflow_semantic_version": null,
+                "workflow_version_id": null
+              }
+            ],
+            "runtime_effect_observed": true,
+            "workflow_run_id": "run_13bbb4a9-a43b-4a69-ae5b-b80d945d2501"
+          },
+          "public_error": {
+            "code": "Cancelled",
+            "message": "cancelled: scheduler task 'infer' failed (runtime_host.cancellation_requested): embedded runtime-host execution cancelled before completion: bounded CPU text probe cancellation",
+            "phase": "None"
+          },
+          "public_result_projection_qualified": true,
+          "runtime_effect_observed": true,
+          "scope": "public_cpu_text_terminal_integration"
+        },
+        "probe_passed": true,
+        "process_id": 18683,
+        "process_marker": "a0caa484-6524-46fa-a5f7-69126559e9f2",
+        "public_result_projection_qualified": true,
+        "runtime_effect_observed": true,
+        "scenario": "cancel",
+        "shutdown_ok": true,
+        "stage": "scheduler_dispatch",
+        "synthetic": true,
+        "t3_qualified": false
+      },
+      "reopen": {
+        "cleanup_ok": true,
+        "cold_reopen_qualified": true,
+        "diagnostics_may_be_truncated": false,
+        "integration_passed": true,
+        "limits": {
+          "device": "cpu",
+          "max_loaded_sessions": 1,
+          "max_model_bytes": 629145600,
+          "max_new_tokens": 24,
+          "temperature": 0.0,
+          "timeout_ms": 60000
+        },
+        "output": {
+          "public_result_projection_qualified": true,
+          "runtime_effect_observed": true,
+          "scope": "native_cpu_text_integration",
+          "text": ":::eeeeeeeeeeeeeeeeeeeee"
+        },
+        "probe_passed": true,
+        "process_id": 18701,
+        "process_marker": "5816fa37-83f1-4dca-8c06-d9a237f53de7",
+        "public_result_projection_qualified": true,
+        "runtime_effect_observed": true,
+        "scenario": "reopen",
+        "shutdown_ok": true,
+        "stage": "output_verified",
+        "synthetic": true,
+        "t3_qualified": false
+      }
+    }
+  },
+  "hosted": {
+    "text_run": 39659962842,
+    "text_job": 119430091754,
+    "artifact_id": 12373726817,
+    "artifact_upload_digest": "sha256:df0e3017d5b3cafcd83b9e3ed48cdc34b06263e8c77d58dec61594701c457ae0",
+    "hosted_artifact_materialized_locally": false,
+    "clippy_run": 39659962837,
+    "clippy_job": 119430092132,
+    "clippy_command": "cargo clippy --workspace --all-targets --all-features --keep-going -- -D warnings",
+    "clippy_checkout": "a199dbd791c1bdd0dd0a2e3a94ba53ecf599c6ab",
+    "clippy_tree_equals_source": true,
+    "initial_failed_text_run": 39658398681,
+    "implementation_source_workflows": [
+      {
+        "name": "CPU Text Workflow Integration",
+        "run_id": 39659962842,
+        "conclusion": "success"
+      },
+      {
+        "name": "CPU Composition Contract",
+        "run_id": 39659963058,
+        "conclusion": "success"
+      },
+      {
+        "name": "Quality Gates",
+        "run_id": 39659962837,
+        "conclusion": "success"
+      },
+      {
+        "name": "Runtime Separation Check",
+        "run_id": 39659962647,
+        "conclusion": "success"
+      },
+      {
+        "name": "Headless Workflow Contract",
+        "run_id": 39659962708,
+        "conclusion": "success"
+      }
+    ],
+    "final_evidence_only_head_ci": "separate observation after push"
+  },
+  "supporting_gates": {
+    "affected_rustfmt": "passed",
+    "bash_syntax": "passed",
+    "workflow_yaml_parse": "passed",
+    "traceability_tool_regressions": 28,
+    "staged_and_source_range_traceability": "passed",
+    "source_and_diff_review": "passed"
+  },
+  "acceptance": {
+    "T1": "satisfied",
+    "T2": "satisfied",
+    "T4": "satisfied; bounded untrained CPU integration",
+    "T5": "satisfied; same-version saved graph cold reopen with retained immutable authorization and fresh readiness",
+    "T3": "blocked; not executed"
+  },
+  "remaining_inputs": [
+    "Verified local trained weights/config/tokenizer within the 600 MiB input budget",
+    "Authoritative upstream repository and immutable revision with acquisition checksums",
+    "Authoritative license terms/notices and permission for the intended model use",
+    "Sanctioned official model-host access or the verified local asset set"
+  ],
+  "prior_model_access": {
+    "candidate": "distilbert/distilgpt2",
+    "revision": "2290a62682d06624634c1f46a6ad5be0f47f38aa",
+    "target": "https://huggingface.co/distilbert/distilgpt2/resolve/2290a62682d06624634c1f46a6ad5be0f47f38aa/config.json",
+    "outcome": "proxy CONNECT HTTP403; curl56",
+    "retried_this_task": false,
+    "approval_review_rejected": false
+  },
+  "limits": [
+    "CPU/headless, untrained fixture, one loaded session, max24 new tokens",
+    "Early active cancellation; no interrupted-compute-after-first-token qualification",
+    "Normal Pumas metadata/index startup reconciliation; no untouched-index or crash-recovery claim",
+    "No trained quality, GPU, native GUI, performance, allocator-memory or text-to-image qualification"
+  ],
+  "review": {
+    "model": "GPT-6.1 Sol",
+    "reasoning": "High",
+    "source": "admitted without material findings",
+    "hosted_evidence": "admitted with exact synthetic-merge tree equivalence",
+    "final_local_evidence": "admitted without material findings",
+    "archive_entries_verified": 105,
+    "unchanged_source_bindings_verified": 11
+  },
+  "branch": {
+    "name": "integrate/text-generation-2026-10-21",
+    "owner": "CPU text integration lead",
+    "target": "main",
+    "disposition": "retained-protected for draft review and blocked T3 follow-up",
+    "synchronization": "ordinary follow-up commits; no force push or rewrite",
+    "retirement": "parent coordination after review/integration",
+    "created_worktree": false
+  }
+}

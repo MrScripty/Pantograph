@@ -1,0 +1,48 @@
+name: CPU Text Workflow Integration
+on:
+  pull_request:
+    paths:
+      - 'crates/**'
+      - 'Cargo.*'
+      - 'scripts/qualify-cpu-text-workflow.sh'
+      - '.github/workflows/cpu-text-integration.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  public-text-workflow:
+    name: Public CPU text effects and cold reopen (untrained fixture)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - run: ./scripts/install-ubuntu-build-dependencies.sh
+      - uses: dtolnay/rust-toolchain@1.92.0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: Swatinem/rust-cache@v2
+      - name: Install explicit CPU worker prerequisites
+        run: |
+          python -m venv "$RUNNER_TEMP/text-venv"
+          "$RUNNER_TEMP/text-venv/bin/python" -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          "$RUNNER_TEMP/text-venv/bin/python" -m pip install 'transformers>=4.52,<4.54' 'soundfile==0.13.1' accelerate safetensors tokenizers
+      - name: Observe generation, loader failure, early active cancellation and cold reopen
+        env:
+          TEXT_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          CARGO_BUILD_JOBS: '2'
+          CARGO_INCREMENTAL: '0'
+          CARGO_PROFILE_DEV_DEBUG: '0'
+        run: |
+          export PYO3_PYTHON="$RUNNER_TEMP/text-venv/bin/python"
+          python_library_dir="$("$PYO3_PYTHON" -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))')"
+          export LD_LIBRARY_PATH="$python_library_dir${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          bash scripts/qualify-cpu-text-workflow.sh "$TEXT_SOURCE_SHA" "$RUNNER_TEMP/public-text-evidence"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: public-cpu-text-workflow-untrained
+          path: ${{ runner.temp }}/public-text-evidence/
+          if-no-files-found: warn
