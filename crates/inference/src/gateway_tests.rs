@@ -68,9 +68,9 @@ use crate::image_generation_planner::{
 use crate::model_contracts::{
     CacheGenerationOptions, DiffusersComponentRole, GenerationOptions, ImageGenerationFamilyLabel,
     InferenceLifecyclePhase, InferenceTaskId, LengthGenerationOptions, ModelArtifactKind,
-    ModelStorageKind, ModelValidationState, OptionSupportState, PumasArtifactEntryPath,
-    PumasArtifactLoadPathKind, PumasArtifactLoadTarget, PumasModelRef, ResolvedModelPackageFacts,
-    SamplingGenerationOptions, StoppingGenerationOptions, MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
+    ModelStorageKind, ModelValidationState, OptionSupportState, PumasArtifactLoadPathKind,
+    PumasArtifactLoadTarget, PumasModelRef, ResolvedModelPackageFacts, SamplingGenerationOptions,
+    StoppingGenerationOptions, MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
 };
 use crate::resource_estimates::{InferenceResourceEstimate, InferenceResourceEstimateKind};
 use crate::resource_observation::{
@@ -251,8 +251,7 @@ fn sample_image_generation_plan() -> ImageGenerationExecutionPlan {
             selected_artifact_path: Some("image/mock-image-model".to_string()),
             migration_diagnostics: Vec::new(),
         },
-        artifact_entry_path: PumasArtifactEntryPath::parse("image/mock-image-model")
-            .expect("valid artifact path"),
+        artifact_entry_path: "image/mock-image-model".to_string(),
         artifact_load_target: PumasArtifactLoadTarget {
             model_ref: PumasModelRef {
                 model_id: "mock-image-model".to_string(),
@@ -267,6 +266,8 @@ fn sample_image_generation_plan() -> ImageGenerationExecutionPlan {
             library_root_id: Some("test-root".to_string()),
             storage_kind: ModelStorageKind::LibraryOwned,
             validation_state: ModelValidationState::Valid,
+            verification_source_fingerprint: None,
+            verification_observed_from_cache_at: None,
             content_fingerprint: None,
             package_facts_contract_version: Some(MODEL_PACKAGE_FACTS_CONTRACT_VERSION),
         },
@@ -347,7 +348,12 @@ fn image_generation_package_fixture(name: &str) -> ResolvedModelPackageFacts {
         ),
         other => panic!("unknown package fixture: {other}"),
     };
-    serde_json::from_str(raw).expect("package fixture should decode")
+    let mut facts: ResolvedModelPackageFacts =
+        serde_json::from_str(raw).expect("package fixture should decode");
+    if facts.artifact.artifact_kind == ModelArtifactKind::DiffusersBundle {
+        facts.model_ref.selected_artifact_id = Some("diffusers".to_string());
+    }
+    facts
 }
 
 fn sample_artifact_load_target(facts: &ResolvedModelPackageFacts) -> PumasArtifactLoadTarget {
@@ -359,6 +365,8 @@ fn sample_artifact_load_target(facts: &ResolvedModelPackageFacts) -> PumasArtifa
         library_root_id: Some("test-root".to_string()),
         storage_kind: ModelStorageKind::LibraryOwned,
         validation_state: ModelValidationState::Valid,
+        verification_source_fingerprint: None,
+        verification_observed_from_cache_at: None,
         content_fingerprint: None,
         package_facts_contract_version: Some(facts.package_facts_contract_version),
     }
@@ -418,7 +426,7 @@ fn sample_image_backend_decision(backend_id: &str) -> BackendExecutionDecision {
         selected_model_ref: Some(PumasModelRef {
             model_id: "pumas://models/image/stable-diffusion/tiny-sd".to_string(),
             revision: None,
-            selected_artifact_id: None,
+            selected_artifact_id: Some("diffusers".to_string()),
             selected_artifact_path: None,
             migration_diagnostics: Vec::new(),
         }),
@@ -1977,6 +1985,50 @@ fn test_planned_image_generation_launch_handoff_rejects_selected_model_mismatch(
     .expect_err("launch handoff must reject model mismatches");
 
     assert!(error.to_string().contains("selected model"));
+}
+
+#[test]
+fn test_planned_image_generation_launch_handoff_rejects_missing_artifact_identity() {
+    let facts = image_generation_package_fixture("diffusers_sd_text_to_image_package_facts.json");
+    let mut decision = sample_image_backend_decision("pytorch");
+    decision
+        .selected_model_ref
+        .as_mut()
+        .expect("fixture has selected model ref")
+        .selected_artifact_id = None;
+
+    let error = PlannedImageGenerationLaunchHandoff::new(
+        facts.clone(),
+        sample_artifact_load_target(&facts),
+        decision,
+    )
+    .expect_err("launch handoff must reject missing producer artifact identity");
+
+    assert!(error
+        .to_string()
+        .contains("producer-selected artifact identity"));
+}
+
+#[test]
+fn test_planned_image_generation_launch_handoff_rejects_conflicting_revision_identity() {
+    let mut facts =
+        image_generation_package_fixture("diffusers_sd_text_to_image_package_facts.json");
+    facts.model_ref.revision = Some("producer-revision".to_string());
+    let mut decision = sample_image_backend_decision("pytorch");
+    decision
+        .selected_model_ref
+        .as_mut()
+        .expect("fixture has selected model ref")
+        .revision = Some("scheduler-revision".to_string());
+
+    let error = PlannedImageGenerationLaunchHandoff::new(
+        facts.clone(),
+        sample_artifact_load_target(&facts),
+        decision,
+    )
+    .expect_err("launch handoff must reject conflicting producer revision identity");
+
+    assert!(error.to_string().contains("revisions conflict"));
 }
 
 #[tokio::test]

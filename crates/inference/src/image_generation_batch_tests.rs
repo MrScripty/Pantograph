@@ -14,8 +14,8 @@ use crate::device_contracts::{
 use crate::image_generation_planner::ImageGenerationExecutionPlan;
 use crate::model_contracts::{
     DiffusersComponentRole, ImageGenerationFamilyLabel, ModelArtifactKind, ModelStorageKind,
-    ModelValidationState, PumasArtifactEntryPath, PumasArtifactLoadPathKind,
-    PumasArtifactLoadTarget, PumasModelRef, MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
+    ModelValidationState, PumasArtifactLoadPathKind, PumasArtifactLoadTarget, PumasModelRef,
+    MODEL_PACKAGE_FACTS_CONTRACT_VERSION,
 };
 use crate::resource_estimates::{InferenceResourceEstimate, InferenceResourceEstimateKind};
 use crate::types::{EncodedImage, ImageGenerationRequest, ImageGenerationResult};
@@ -174,8 +174,7 @@ fn image_plan(prompt: &str) -> ImageGenerationExecutionPlan {
 
     ImageGenerationExecutionPlan {
         model_ref: model_ref(),
-        artifact_entry_path: PumasArtifactEntryPath::parse("image/mock-image-model")
-            .expect("valid artifact path"),
+        artifact_entry_path: "image/mock-image-model".to_string(),
         artifact_load_target: PumasArtifactLoadTarget {
             model_ref: model_ref(),
             artifact_kind: ModelArtifactKind::DiffusersBundle,
@@ -184,6 +183,8 @@ fn image_plan(prompt: &str) -> ImageGenerationExecutionPlan {
             library_root_id: Some("test-root".to_string()),
             storage_kind: ModelStorageKind::LibraryOwned,
             validation_state: ModelValidationState::Valid,
+            verification_source_fingerprint: None,
+            verification_observed_from_cache_at: None,
             content_fingerprint: None,
             package_facts_contract_version: Some(MODEL_PACKAGE_FACTS_CONTRACT_VERSION),
         },

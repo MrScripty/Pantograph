@@ -8,7 +8,7 @@ use pantograph_inference_interface_contracts::{
     InferenceInterfaceDiagnostic, InferenceInterfaceDriftReport, InferenceInterfaceFingerprint,
     RuntimeIntentId, WorkflowGraphRevision, WorkflowNodeId, INFERENCE_INTERFACE_CONTRACT_VERSION,
 };
-use pantograph_scheduler::SchedulerEstimateHint;
+use pantograph_scheduler::{SchedulerEstimateHint, SchedulerTraitSetting};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -86,6 +86,8 @@ pub struct InferenceInterfaceNodeProjectionRecord {
     pub descriptor: InferenceInterfaceDescriptor,
     pub authored_snapshot: AuthoredInferenceInterfaceSnapshot,
     pub runtime_source_context: WorkflowRuntimeSourceContext,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub trait_settings: Vec<SchedulerTraitSetting>,
     pub validation_summary: DraftGraphValidationSummary,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub drift_report: Option<InferenceInterfaceDriftReport>,
@@ -261,6 +263,7 @@ pub(crate) fn publish_inference_validation_for_resolution_inputs(
             descriptor: projection.descriptor,
             authored_snapshot: projection.authored_snapshot,
             runtime_source_context: input.runtime_source_context.clone(),
+            trait_settings: input.trait_settings.clone(),
             validation_summary: projection.validation_summary,
             drift_report: projection.drift_report,
             update_proposal,

@@ -55,6 +55,8 @@ pub(crate) fn fixture(
         library_root_id: Some("synthetic-test-root".into()),
         storage_kind: package.artifact.storage_kind.clone(),
         validation_state: ModelValidationState::Valid,
+        verification_source_fingerprint: None,
+        verification_observed_from_cache_at: None,
         content_fingerprint: None,
         package_facts_contract_version: Some(package.package_facts_contract_version),
     };
@@ -105,7 +107,42 @@ fn same_model_identity(left: &PumasModelRef, right: &PumasModelRef) -> bool {
     left.model_id.trim_start_matches("pumas://models/")
         == right.model_id.trim_start_matches("pumas://models/")
         && left.selected_artifact_id == right.selected_artifact_id
-        && left.selected_artifact_path == right.selected_artifact_path
+        && artifact_paths_compatible(
+            left.selected_artifact_path.as_deref(),
+            right.selected_artifact_path.as_deref(),
+        )
+}
+
+fn revisions_agree(references: &[&PumasModelRef]) -> bool {
+    let mut observed = None;
+    for reference in references {
+        if let Some(revision) = reference.revision.as_deref() {
+            if observed.is_some_and(|previous| previous != revision) {
+                return false;
+            }
+            observed = Some(revision);
+        }
+    }
+    true
+}
+
+fn artifact_paths_agree(references: &[&PumasModelRef]) -> bool {
+    let mut observed = None;
+    for reference in references {
+        if let Some(path) = reference.selected_artifact_path.as_deref() {
+            if observed.is_some_and(|previous| previous != path) {
+                return false;
+            }
+            observed = Some(path);
+        }
+    }
+    true
+}
+
+// Intent-first Pumas results may omit the legacy selected artifact path; a
+// supplied path must still agree with every other supplied path.
+fn artifact_paths_compatible(left: Option<&str>, right: Option<&str>) -> bool {
+    left.is_none() || right.is_none() || left == right
 }
 
 impl<'a> SelectedEmbeddingLoad<'a> {
@@ -139,7 +176,14 @@ impl<'a> SelectedEmbeddingLoad<'a> {
             .selected_model_ref
             .as_ref()
             .ok_or_else(|| invalid("scheduler model identity is required"))?;
-        for reference in [model, selected, &package.model_ref] {
+        let references = [model, selected, &package.model_ref];
+        if !revisions_agree(&references) {
+            return Err(invalid("request/package/scheduler revisions disagree"));
+        }
+        if !artifact_paths_agree(&references) {
+            return Err(invalid("request/package/scheduler artifact paths disagree"));
+        }
+        for reference in references {
             reference
                 .validate()
                 .map_err(|error| invalid(error.to_string()))?;
@@ -148,6 +192,13 @@ impl<'a> SelectedEmbeddingLoad<'a> {
                     "request/package/target/scheduler model or artifact mismatch",
                 ));
             }
+        }
+        if model.selected_artifact_id.is_none()
+            || selected.selected_artifact_id.is_none()
+            || package.model_ref.selected_artifact_id.is_none()
+            || target.model_ref.selected_artifact_id.is_none()
+        {
+            return Err(invalid("producer-selected artifact identity is required"));
         }
         if request.model_name.as_deref().is_some_and(|name| {
             !name.is_empty()
@@ -268,6 +319,37 @@ impl<'a> SelectedEmbeddingLoad<'a> {
             target,
             device,
         })
+    }
+}
+
+#[cfg(test)]
+mod identity_tests {
+    use super::*;
+
+    #[test]
+    fn artifact_paths_are_compatible_when_intent_omits_the_legacy_field() {
+        assert!(artifact_paths_compatible(Some("embedding/model"), None));
+        assert!(!artifact_paths_compatible(
+            Some("embedding/a"),
+            Some("embedding/b")
+        ));
+    }
+
+    #[test]
+    fn supplied_artifact_paths_must_agree_without_a_target_path() {
+        let request = PumasModelRef {
+            model_id: "embedding/model".to_string(),
+            revision: None,
+            selected_artifact_id: None,
+            selected_artifact_path: Some("embedding/a".to_string()),
+            migration_diagnostics: Vec::new(),
+        };
+        let package = PumasModelRef {
+            selected_artifact_path: Some("embedding/b".to_string()),
+            ..request.clone()
+        };
+
+        assert!(!artifact_paths_agree(&[&request, &package]));
     }
 }
 

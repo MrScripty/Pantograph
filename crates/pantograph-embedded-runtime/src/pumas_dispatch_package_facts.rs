@@ -50,7 +50,9 @@ impl PumasDispatchPackageFactsSource {
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct PumasDispatchPackageFactsProjection {
     pub model_ref: PumasModelRef,
+    pub package_facts_contract_version: u32,
     pub artifact_kind: inference::ModelArtifactKind,
+    pub storage_kind: inference::ModelStorageKind,
     pub validation_state: inference::ModelValidationState,
     pub task: inference::TaskEvidence,
     pub backend_hints: inference::BackendHintFacts,
@@ -277,12 +279,15 @@ fn validate_dispatch_model_ref(
 fn project_dispatch_package_facts(
     facts: inference::ResolvedModelPackageFacts,
 ) -> PumasDispatchPackageFactsProjection {
+    let package_facts_contract_version = facts.package_facts_contract_version;
     let mut model_ref = facts.model_ref;
     model_ref.selected_artifact_path = None;
 
     PumasDispatchPackageFactsProjection {
         model_ref,
+        package_facts_contract_version,
         artifact_kind: facts.artifact.artifact_kind,
+        storage_kind: facts.artifact.storage_kind,
         validation_state: facts.artifact.validation_state,
         task: facts.task,
         backend_hints: facts.backend_hints,

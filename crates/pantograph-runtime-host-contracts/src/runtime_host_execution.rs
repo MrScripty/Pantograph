@@ -19,6 +19,7 @@ const MAX_RUNTIME_HOST_INPUTS: usize = 128;
 pub const MAX_RUNTIME_HOST_OUTPUTS: usize = 64;
 const MAX_RUNTIME_HOST_DIAGNOSTICS: usize = 64;
 const MAX_RUNTIME_HOST_BATCH_MEMBERS: usize = 32;
+const MAX_RUNTIME_HOST_VECTOR_ELEMENTS: usize = 65_536;
 
 /// Current contract version for runtime-host execution requests and responses.
 pub const RUNTIME_HOST_EXECUTION_CONTRACT_VERSION: u16 = 2;
@@ -160,6 +161,7 @@ pub enum RuntimeHostExecutionInputValue {
     Bool(bool),
     I64(i64),
     U64(u64),
+    EmbeddingVector(Vec<serde_json::Number>),
     /// Finite JSON number; reuses the scheduler's numeric domain without
     /// permitting NaN/infinity or changing existing integer variants.
     F64(serde_json::Number),
@@ -225,6 +227,7 @@ impl RuntimeHostExecutionInputValue {
                 Ok(())
             }
             Self::String(value) => validate_optional_text("input.string", value),
+            Self::EmbeddingVector(value) => validate_embedding_vector("input.embedding", value),
             Self::TranscriptText(value) => validate_transcript(value),
             Self::MediaArtifactRef(value) => value.validate(),
             Self::F64(value) => {
@@ -354,6 +357,7 @@ pub enum RuntimeHostExecutionOutputValue {
     Bool(bool),
     I64(i64),
     U64(u64),
+    EmbeddingVector(Vec<serde_json::Number>),
     MediaArtifactRef(RuntimeHostExecutionMediaArtifactRef),
     DiagnosticOnly,
 }
@@ -378,6 +382,7 @@ impl RuntimeHostExecutionOutputValue {
                 Ok(())
             }
             Self::String(value) => validate_optional_text("output.string", value),
+            Self::EmbeddingVector(value) => validate_embedding_vector("output.embedding", value),
             Self::TranscriptText(value) => validate_transcript(value),
             Self::MediaArtifactRef(value) => value.validate(),
             Self::Bool(_) | Self::I64(_) | Self::U64(_) | Self::DiagnosticOnly => Ok(()),
@@ -966,6 +971,25 @@ fn validate_optional_text(
         return Err(RuntimeHostExecutionContractError::FieldTooLong {
             field,
             max_len: MAX_TEXT_LEN,
+        });
+    }
+    Ok(())
+}
+
+fn validate_embedding_vector(
+    field: &'static str,
+    value: &[serde_json::Number],
+) -> Result<(), RuntimeHostExecutionContractError> {
+    if value.is_empty() {
+        return Err(RuntimeHostExecutionContractError::InvalidField {
+            field,
+            reason: "embedding vector must not be empty",
+        });
+    }
+    if value.len() > MAX_RUNTIME_HOST_VECTOR_ELEMENTS {
+        return Err(RuntimeHostExecutionContractError::InvalidField {
+            field,
+            reason: "embedding vector exceeds the maximum element count",
         });
     }
     Ok(())

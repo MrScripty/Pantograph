@@ -1082,7 +1082,7 @@ fn decision_conflicts_with_required_backends(
 fn decision_enforces_runtime_readiness(
     decision: &WorkflowTechnicalFitDecision,
     required_backends: &[String],
-    _required_models: &[String],
+    required_models: &[String],
 ) -> bool {
     if required_backends
         .iter()
@@ -1092,6 +1092,10 @@ fn decision_enforces_runtime_readiness(
     }
 
     if decision.selected_model_id.is_some() {
+        return true;
+    }
+
+    if required_models.iter().any(|model| !model.trim().is_empty()) {
         return true;
     }
 

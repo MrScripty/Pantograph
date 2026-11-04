@@ -73,6 +73,7 @@ fn provider_request_for_candidate(
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
+    use std::sync::{Arc, Mutex};
 
     use crate::dependency_readiness::PythonPackageReadinessSnapshot;
     use crate::package_readiness_provider::{
@@ -93,6 +94,27 @@ mod tests {
             _request: PackageReadinessProbeRequest,
         ) -> PackageReadinessProbeOutcome {
             PackageReadinessProbeOutcome::Snapshot(self.snapshot.clone())
+        }
+    }
+
+    #[derive(Debug, Clone, Default)]
+    struct RecordingRunner {
+        requests: Arc<Mutex<Vec<PackageReadinessProbeRequest>>>,
+    }
+
+    #[async_trait::async_trait]
+    impl PackageReadinessProbeRunner for RecordingRunner {
+        async fn probe(
+            &self,
+            request: PackageReadinessProbeRequest,
+        ) -> PackageReadinessProbeOutcome {
+            self.requests
+                .lock()
+                .expect("package readiness request lock")
+                .push(request);
+            PackageReadinessProbeOutcome::Snapshot(PythonPackageReadinessSnapshot::available(
+                BTreeSet::new(),
+            ))
         }
     }
 
@@ -125,6 +147,13 @@ mod tests {
             "../../inference/tests/fixtures/inference_package_facts/diffusers_sd_text_to_image_package_facts.json"
         ))
         .expect("decode image generation package facts fixture")
+    }
+
+    fn standard_text_package_facts() -> inference::ResolvedModelPackageFacts {
+        serde_json::from_str(include_str!(
+            "../../inference/tests/fixtures/inference_package_facts/gguf_text_generation_package_facts.json"
+        ))
+        .expect("decode standard text-generation package facts fixture")
     }
 
     fn pytorch_backend() -> inference::BackendInfo {
@@ -171,6 +200,42 @@ mod tests {
         }
     }
 
+    fn llama_cpp_backend() -> inference::BackendInfo {
+        let mut backend = pytorch_backend();
+        backend.name = "llama_cpp".to_string();
+        backend.backend_key = "llama_cpp".to_string();
+        backend.capabilities.facts.tasks = vec![inference::BackendTaskCapability::stable(
+            inference::InferenceTaskId::TextGeneration,
+            vec![inference::InferenceModality::Text],
+            vec![inference::InferenceModality::Text],
+        )];
+        backend.capabilities.facts.model_sources.artifact_kinds =
+            vec![inference::ModelArtifactKind::Gguf];
+        backend.capabilities.facts.model_sources.backend_hints =
+            vec![inference::BackendHintLabel::LlamaCpp];
+        backend.capabilities.facts.runtime_variants[0].runtime_variant_id =
+            inference::RuntimeVariantId::parse("llama_cpp.cuda")
+                .expect("llama_cpp runtime variant id must be valid");
+        backend
+    }
+
+    fn standard_text_generation_request() -> pantograph_workflow_service::WorkflowTechnicalFitRequest
+    {
+        pantograph_workflow_service::build_workflow_technical_fit_request(
+            "workflow-standard-text",
+            &pantograph_workflow_service::WorkflowRuntimeRequirements {
+                resource_estimates: Vec::new(),
+                required_models: vec!["llm/llama/tiny-gguf".to_string()],
+                required_backends: vec!["llama_cpp".to_string()],
+                required_extensions: Vec::new(),
+            },
+            None,
+            None,
+            None,
+            None,
+        )
+    }
+
     #[tokio::test]
     async fn collects_pytorch_diffusers_readiness_from_provider() {
         let provider = PackageReadinessProvider::new(SnapshotRunner {
@@ -198,5 +263,39 @@ mod tests {
         assert!(facts
             .iter()
             .any(|fact| fact.dependency_id.as_str() == "diffusers"));
+    }
+
+    #[tokio::test]
+    async fn standard_text_model_without_pumas_profile_does_not_probe_package_readiness() {
+        let package_facts = standard_text_package_facts();
+        let backend = llama_cpp_backend();
+        let evidence =
+            inference::normalize_execution_evidence(inference::ExecutionEvidenceRequest {
+                task_id: inference::InferenceTaskId::TextGeneration,
+                package_facts: &package_facts,
+                backends: std::slice::from_ref(&backend),
+                graph_runtime_requirement: None,
+            });
+        assert!(evidence
+            .candidates
+            .iter()
+            .any(|candidate| candidate.backend_key == "llama_cpp"));
+
+        let runner = RecordingRunner::default();
+        let requests = runner.requests.clone();
+        let provider = PackageReadinessProvider::new(runner);
+        let facts = dependency_readiness_facts_for_technical_fit(
+            &provider,
+            &standard_text_generation_request(),
+            &[backend],
+            &[package_facts],
+        )
+        .await;
+
+        assert!(facts.is_empty());
+        assert!(requests
+            .lock()
+            .expect("package readiness request lock")
+            .is_empty());
     }
 }

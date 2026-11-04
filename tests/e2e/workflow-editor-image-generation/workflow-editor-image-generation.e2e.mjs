@@ -92,13 +92,22 @@ describe('workflow editor image-generation desktop path', () => {
             complete: image.complete,
             naturalWidth: image.naturalWidth,
             naturalHeight: image.naturalHeight,
+            readByteLength: Number(image.dataset.previewByteLength),
+            bodyComplete: image.dataset.previewComplete === 'true',
           }),
         )
         .catch((error) => done({ error: String(error) }));
     }, imageSelector);
     assert.equal(decodedImage.error, undefined, decodedImage.error);
     assert.equal(decodedImage.complete, true);
+    assert.equal(decodedImage.bodyComplete, true, 'Inspector must mark the retained image body complete');
+    assert.ok(decodedImage.readByteLength > 0, 'Decoded image must have a nonempty retained body');
     assert.ok(decodedImage.naturalWidth > 0, 'Decoded image must have positive naturalWidth');
     assert.ok(decodedImage.naturalHeight > 0, 'Decoded image must have positive naturalHeight');
+    assert.equal(
+      await imageArtifact.$(testIdSelector('io-artifact-access-error')).isExisting(),
+      false,
+      'A decoded image must not retain a read or decode error',
+    );
   });
 });

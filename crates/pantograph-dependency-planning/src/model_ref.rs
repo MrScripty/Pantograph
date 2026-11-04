@@ -227,6 +227,12 @@ pub struct PumasArtifactLoadTarget {
     pub library_root_id: Option<String>,
     pub storage_kind: ModelStorageKind,
     pub validation_state: ModelValidationState,
+    /// Source fingerprint reported by Pumas intent verification.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verification_source_fingerprint: Option<String>,
+    /// Cache observation timestamp reported by Pumas intent verification.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verification_observed_from_cache_at: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub content_fingerprint: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

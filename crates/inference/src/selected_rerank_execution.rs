@@ -259,6 +259,8 @@ pub(crate) mod tests {
             library_root_id: Some("synthetic-root".into()),
             storage_kind: ModelStorageKind::LibraryOwned,
             validation_state: ModelValidationState::Valid,
+            verification_source_fingerprint: None,
+            verification_observed_from_cache_at: None,
             content_fingerprint: None,
             package_facts_contract_version: Some(package.package_facts_contract_version),
         };

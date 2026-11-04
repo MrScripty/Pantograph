@@ -82,6 +82,8 @@ pub(crate) fn fixture(
         library_root_id: Some("synthetic-fixture-root".into()),
         storage_kind: inference::ModelStorageKind::LibraryOwned,
         validation_state: inference::ModelValidationState::Valid,
+        verification_source_fingerprint: None,
+        verification_observed_from_cache_at: None,
         content_fingerprint: None,
         package_facts_contract_version: Some(package.package_facts_contract_version),
     };
@@ -93,14 +95,14 @@ pub(crate) fn fixture(
     )
 }
 
-pub(crate) struct Target(pub(crate) pumas_library::models::PumasArtifactLoadTarget);
+pub(crate) struct Target(pub(crate) inference::PumasArtifactLoadTarget);
 #[async_trait]
 impl crate::runtime_host_load_target::RuntimeHostLoadTargetResolver for Target {
     async fn resolve(
         &self,
         _: &ValidatedRuntimeHostExecutionRequest,
     ) -> Result<
-        pumas_library::models::PumasArtifactLoadTarget,
+        inference::PumasArtifactLoadTarget,
         crate::runtime_host_load_target::RuntimeHostPumasLoadTargetError,
     > {
         Ok(self.0.clone())
@@ -476,7 +478,7 @@ impl crate::runtime_host_load_target::RuntimeHostLoadTargetResolver for NeverRes
         &self,
         _: &ValidatedRuntimeHostExecutionRequest,
     ) -> Result<
-        pumas_library::models::PumasArtifactLoadTarget,
+        inference::PumasArtifactLoadTarget,
         crate::runtime_host_load_target::RuntimeHostPumasLoadTargetError,
     > {
         panic!("invalid or pre-cancelled embedding must reject before target resolution")

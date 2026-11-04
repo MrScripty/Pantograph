@@ -60,14 +60,18 @@ impl WorkflowHost for EmbeddedWorkflowHost {
         &self,
         model_id: &str,
     ) -> Result<Option<serde_json::Value>, WorkflowServiceError> {
-        let Some(api) = self.pumas_api().await else {
+        let model = if let Some(selector_access) = self.pumas_selector_access().await {
+            selector_access
+                .model_record(model_id)
+                .await
+                .map_err(|e| WorkflowServiceError::RuntimeNotReady(e.to_string()))?
+        } else if let Some(api) = self.pumas_api().await {
+            api.get_model(model_id)
+                .await
+                .map_err(|e| WorkflowServiceError::RuntimeNotReady(e.to_string()))?
+        } else {
             return Ok(None);
         };
-
-        let model = api
-            .get_model(model_id)
-            .await
-            .map_err(|e| WorkflowServiceError::RuntimeNotReady(e.to_string()))?;
         Ok(model.map(|m| m.metadata))
     }
 
@@ -75,17 +79,21 @@ impl WorkflowHost for EmbeddedWorkflowHost {
         &self,
         model_id: &str,
     ) -> Result<Option<WorkflowHostModelDescriptor>, WorkflowServiceError> {
-        let Some(api) = self.pumas_api().await else {
+        let model = if let Some(selector_access) = self.pumas_selector_access().await {
+            selector_access
+                .model_record(model_id)
+                .await
+                .map_err(|e| WorkflowServiceError::RuntimeNotReady(e.to_string()))?
+        } else if let Some(api) = self.pumas_api().await {
+            api.get_model(model_id)
+                .await
+                .map_err(|e| WorkflowServiceError::RuntimeNotReady(e.to_string()))?
+        } else {
             return Ok(None);
         };
-
-        let model = api
-            .get_model(model_id)
-            .await
-            .map_err(|e| WorkflowServiceError::RuntimeNotReady(e.to_string()))?;
-        Ok(model.map(|m| WorkflowHostModelDescriptor {
-            model_type: Some(m.model_type.trim().to_string()).filter(|v| !v.is_empty()),
-            hashes: m.hashes,
+        Ok(model.map(|model| WorkflowHostModelDescriptor {
+            model_type: Some(model.model_type.trim().to_string()).filter(|v| !v.is_empty()),
+            hashes: model.hashes,
         }))
     }
 

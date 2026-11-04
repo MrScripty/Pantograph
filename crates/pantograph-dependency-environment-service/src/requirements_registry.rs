@@ -85,11 +85,26 @@ impl DependencyRequirementsPayload {
         self.identity_key
             .validate()
             .map_err(DependencyRequirementsRegistryError::InvalidContract)?;
-        if self.requirements.is_empty() {
+        // An empty identity selection lets the resolved payload choose its
+        // bindings (native CPU bootstrap); an explicit identity selection must
+        // match the payload exactly.
+        if !self.identity_key.selected_binding_ids.is_empty()
+            && self.identity_key.selected_binding_ids != self.selected_binding_ids
+        {
             return Err(DependencyRequirementsRegistryError::InvalidPayload {
-                field: "dependency_requirements_payload.requirements",
-                reason: "requirements payload must include at least one requirement",
+                field: "dependency_requirements_payload.identity_key.selected_binding_ids",
+                reason: "identity and payload selected binding ids must agree",
             });
+        }
+        if self.requirements.is_empty() {
+            if !self.bindings.is_empty() || !self.selected_binding_ids.is_empty() {
+                return Err(DependencyRequirementsRegistryError::InvalidPayload {
+                    field: "dependency_requirements_payload.requirements",
+                    reason:
+                        "empty requirements payloads must not include bindings or selected binding ids",
+                });
+            }
+            return Ok(());
         }
         if self.bindings.is_empty() {
             return Err(DependencyRequirementsRegistryError::InvalidPayload {

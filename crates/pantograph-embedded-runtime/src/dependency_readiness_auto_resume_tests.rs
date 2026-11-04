@@ -23,7 +23,7 @@ async fn auto_resume_shutdown_is_idempotent_and_noops_without_candidates() {
         .spawn(tokio::runtime::Handle::current())
         .expect("auto-resume should spawn");
 
-    tokio::time::sleep(Duration::from_millis(20)).await;
+    wait_for_candidate_poll_count(port.as_ref(), 1).await;
 
     handle.shutdown().await;
     handle.shutdown().await;
@@ -140,8 +140,6 @@ async fn embedded_runtime_spawns_real_auto_resume_port_without_candidates() {
         .spawn_dependency_readiness_auto_resume(tokio::runtime::Handle::current(), test_config())
         .expect("auto-resume should spawn with real workflow-service port");
 
-    tokio::time::sleep(Duration::from_millis(20)).await;
-
     handle.shutdown().await;
     handle.shutdown().await;
 }
@@ -163,16 +161,39 @@ fn resume_request(
 }
 
 async fn wait_for_resume_count(port: &FakeAutoResumePort, expected: usize) {
-    for _ in 0..20 {
-        if port.resume_requests().len() >= expected {
-            return;
+    tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            if port.resume_requests().len() >= expected {
+                return;
+            }
+            tokio::task::yield_now().await;
         }
-        tokio::time::sleep(Duration::from_millis(5)).await;
-    }
-    panic!(
-        "timed out waiting for {expected} resume request(s), observed {:?}",
-        port.resume_requests()
-    );
+    })
+    .await
+    .unwrap_or_else(|_| {
+        panic!(
+            "timed out waiting for {expected} resume request(s), observed {:?}",
+            port.resume_requests()
+        )
+    });
+}
+
+async fn wait_for_candidate_poll_count(port: &FakeAutoResumePort, expected: usize) {
+    tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            if port.candidate_polls() >= expected {
+                return;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap_or_else(|_| {
+        panic!(
+            "timed out waiting for {expected} candidate poll(s), observed {}",
+            port.candidate_polls()
+        )
+    });
 }
 
 struct FakeAutoResumePort {

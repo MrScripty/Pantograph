@@ -34,13 +34,13 @@ pub struct PumaHfDownloadStartAuditResponse {
     pub audit_event_seq: Option<i64>,
 }
 
-async fn require_pumas_api(
+async fn require_pumas_selector_access(
     extensions: &State<'_, SharedExtensions>,
-) -> Result<Arc<pumas_library::PumasApi>, String> {
+) -> Result<std::sync::Arc<PumasSelectorAccess>, String> {
     let ext = extensions.read().await;
-    ext.get::<Arc<pumas_library::PumasApi>>(node_engine::extension_keys::PUMAS_API)
+    ext.get::<std::sync::Arc<PumasSelectorAccess>>(PUMAS_SELECTOR_ACCESS)
         .cloned()
-        .ok_or_else(|| "Pumas API not available in executor extensions".to_string())
+        .ok_or_else(|| "Pumas selector access not available in executor extensions".to_string())
 }
 
 pub async fn hydrate_puma_lib_node(
@@ -74,8 +74,8 @@ pub async fn delete_pumas_model_with_audit(
     model_id: String,
 ) -> Result<PumaModelDeleteAuditResponse, String> {
     let model_id = validate_pumas_model_id_for_audit(&model_id)?;
-    let api = require_pumas_api(&extensions).await?;
-    let delete_result = api
+    let selector_access = require_pumas_selector_access(&extensions).await?;
+    let delete_result = selector_access
         .delete_model_with_cascade(model_id)
         .await
         .map_err(|error| error.to_string())?;
@@ -105,8 +105,8 @@ pub async fn search_hf_models_with_audit(
     let kind = validate_optional_hf_search_kind(kind)?;
     let limit = validate_hf_search_limit(limit.unwrap_or(50))?;
     let hydrate_limit = validate_hf_search_limit(hydrate_limit.unwrap_or(limit))?.min(limit);
-    let api = require_pumas_api(&extensions).await?;
-    let models = api
+    let selector_access = require_pumas_selector_access(&extensions).await?;
+    let models = selector_access
         .search_hf_models_with_hydration(query, kind.as_deref(), limit, hydrate_limit)
         .await
         .map_err(|error| error.to_string())?;
@@ -124,8 +124,8 @@ pub async fn start_hf_download_with_audit(
     request: pumas_library::model_library::DownloadRequest,
 ) -> Result<PumaHfDownloadStartAuditResponse, String> {
     validate_hf_repo_id_for_audit(&request.repo_id)?;
-    let api = require_pumas_api(&extensions).await?;
-    let download_id = api
+    let selector_access = require_pumas_selector_access(&extensions).await?;
+    let download_id = selector_access
         .start_hf_download(&request)
         .await
         .map_err(|error| error.to_string())?;

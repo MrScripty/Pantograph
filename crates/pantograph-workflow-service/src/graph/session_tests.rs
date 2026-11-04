@@ -1322,16 +1322,16 @@ async fn refresh_current_validation_summary_rejects_stale_requested_revision() {
 
 #[tokio::test]
 async fn refresh_current_validation_summary_rejects_revision_changed_during_fact_lookup() {
-    let entered = Arc::new(Notify::new());
-    let release = Arc::new(Notify::new());
+    let first_entered = Arc::new(Notify::new());
+    let first_release = Arc::new(Notify::new());
     let second_entered = Arc::new(Notify::new());
     let second_release = Arc::new(Notify::new());
     let store = Arc::new(GraphSessionStore::with_inference_interface_facts_provider(
         Arc::new(SequencedBlockingInferenceFactsProvider {
             facts: BTreeMap::from([("infer".to_string(), ready_inference_facts())]),
-            calls: Mutex::new(0),
-            first_entered: Arc::clone(&entered),
-            first_release: Arc::clone(&release),
+            calls: std::sync::Mutex::new(0),
+            first_entered: Arc::clone(&first_entered),
+            first_release: Arc::clone(&first_release),
             second_entered: Arc::clone(&second_entered),
             second_release: Arc::clone(&second_release),
         }),
@@ -1353,7 +1353,7 @@ async fn refresh_current_validation_summary_rejects_revision_changed_during_fact
             })
             .await
     });
-    entered.notified().await;
+    first_entered.notified().await;
 
     let updated = store
         .remove_edge(WorkflowGraphRemoveEdgeRequest {
@@ -1363,9 +1363,7 @@ async fn refresh_current_validation_summary_rejects_revision_changed_during_fact
         .await
         .expect("mutate graph while validation facts are pending");
     second_entered.notified().await;
-    release.notify_one();
-    second_release.notify_one();
-    store.drain_validation_tasks_for_tests().await;
+    first_release.notify_one();
     let response = refresh
         .await
         .expect("refresh task should not panic")
@@ -1381,6 +1379,9 @@ async fn refresh_current_validation_summary_rejects_revision_changed_during_fact
         response.summary.submit_gate.reason_code,
         Some(WorkflowGraphValidationSubmitGateReason::GraphRevisionStale)
     );
+
+    second_release.notify_one();
+    store.drain_validation_tasks_for_tests().await;
 
     let current = store
         .current_validation_summary(WorkflowGraphCurrentValidationSummaryRequest {

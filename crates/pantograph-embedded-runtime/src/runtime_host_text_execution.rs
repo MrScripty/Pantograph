@@ -115,7 +115,7 @@ pub(crate) fn validate_runtime_host_text_generation_request(
 pub(crate) fn project_runtime_host_text_generation(
     request: &ValidatedRuntimeHostExecutionRequest,
     package_facts: ResolvedModelPackageFacts,
-    load_target: pumas_library::models::PumasArtifactLoadTarget,
+    load_target: PumasArtifactLoadTarget,
 ) -> Result<RuntimeHostTextGenerationProjection, RuntimeHostTextGenerationProjectionError> {
     let request = request.as_ref();
     validate_runtime_host_text_generation_request(request)?;
@@ -789,6 +789,10 @@ mod tests {
         assert_eq!(
             projection.artifact_load_target().local_load_path,
             target_path
+        );
+        assert!(
+            projection.request().generation_options.is_none(),
+            "runtime-host text must not impose the acceptance fixture's token budget"
         );
     }
 
@@ -2253,7 +2257,9 @@ mod tests {
             pumas_package_facts: Some(PumasDispatchPackageFactsBridgeOutcome::Projected {
                 facts: Box::new(PumasDispatchPackageFactsProjection {
                     model_ref: intent.model_ref.clone(),
+                    package_facts_contract_version: package.package_facts_contract_version,
                     artifact_kind: package.artifact.artifact_kind.clone(),
+                    storage_kind: package.artifact.storage_kind.clone(),
                     validation_state: package.artifact.validation_state.clone(),
                     task: package.task.clone(),
                     backend_hints: package.backend_hints.clone(),
@@ -2279,6 +2285,8 @@ mod tests {
                         library_root_id: target.library_root_id.clone(),
                         storage_kind: "LibraryOwned".into(),
                         validation_state: "Valid".into(),
+                        verification_source_fingerprint: None,
+                        verification_observed_from_cache_at: None,
                         content_fingerprint: None,
                         package_facts_contract_version: Some(
                             package.package_facts_contract_version,
@@ -2605,7 +2613,9 @@ mod tests {
             pumas_package_facts: Some(PumasDispatchPackageFactsBridgeOutcome::Projected {
                 facts: Box::new(PumasDispatchPackageFactsProjection {
                     model_ref: intent.model_ref.clone(),
+                    package_facts_contract_version: package_facts.package_facts_contract_version,
                     artifact_kind: package_facts.artifact.artifact_kind.clone(),
+                    storage_kind: package_facts.artifact.storage_kind.clone(),
                     validation_state: package_facts.artifact.validation_state.clone(),
                     task: package_facts.task.clone(),
                     backend_hints: package_facts.backend_hints.clone(),
@@ -2627,6 +2637,8 @@ mod tests {
                         library_root_id: Some("text-test-root".into()),
                         storage_kind: "LibraryOwned".into(),
                         validation_state: "Valid".into(),
+                        verification_source_fingerprint: None,
+                        verification_observed_from_cache_at: None,
                         content_fingerprint: None,
                         package_facts_contract_version: Some(
                             package_facts.package_facts_contract_version,
@@ -2879,32 +2891,34 @@ mod tests {
     fn text_load_target(
         package_facts: &ResolvedModelPackageFacts,
         target_directory: &tempfile::TempDir,
-    ) -> pumas_library::models::PumasArtifactLoadTarget {
-        pumas_library::models::PumasArtifactLoadTarget {
-            model_ref: pumas_library::models::PumasModelRef {
+    ) -> PumasArtifactLoadTarget {
+        PumasArtifactLoadTarget {
+            model_ref: PumasModelRef {
                 model_id: package_facts.model_ref.model_id.clone(),
                 revision: package_facts.model_ref.revision.clone(),
                 selected_artifact_id: package_facts.model_ref.selected_artifact_id.clone(),
                 selected_artifact_path: package_facts.model_ref.selected_artifact_path.clone(),
-                ..Default::default()
+                migration_diagnostics: Vec::new(),
             },
-            artifact_kind: pumas_library::models::PackageArtifactKind::HfCompatibleDirectory,
+            artifact_kind: inference::ModelArtifactKind::HfCompatibleDirectory,
             local_load_path: target_directory
                 .path()
                 .to_str()
                 .expect("target path")
                 .to_string(),
-            load_path_kind: pumas_library::models::PumasArtifactLoadPathKind::Directory,
+            load_path_kind: inference::PumasArtifactLoadPathKind::Directory,
             library_root_id: Some("text-test-root".to_string()),
-            storage_kind: pumas_library::models::StorageKind::LibraryOwned,
-            validation_state: pumas_library::models::AssetValidationState::Valid,
+            storage_kind: inference::ModelStorageKind::LibraryOwned,
+            validation_state: inference::ModelValidationState::Valid,
+            verification_source_fingerprint: None,
+            verification_observed_from_cache_at: None,
             content_fingerprint: None,
             package_facts_contract_version: Some(package_facts.package_facts_contract_version),
         }
     }
 
     struct TextLoadTargetResolver {
-        target: pumas_library::models::PumasArtifactLoadTarget,
+        target: PumasArtifactLoadTarget,
     }
 
     #[async_trait]
@@ -2913,7 +2927,7 @@ mod tests {
             &self,
             _request: &ValidatedRuntimeHostExecutionRequest,
         ) -> Result<
-            pumas_library::models::PumasArtifactLoadTarget,
+            PumasArtifactLoadTarget,
             crate::runtime_host_load_target::RuntimeHostPumasLoadTargetError,
         > {
             Ok(self.target.clone())

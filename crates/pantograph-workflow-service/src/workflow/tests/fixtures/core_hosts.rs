@@ -87,6 +87,39 @@ pub(in crate::workflow::tests) fn mock_workflow_graph() -> WorkflowGraph {
     }
 }
 
+pub(in crate::workflow::tests) fn mock_workflow_io() -> WorkflowIoResponse {
+    WorkflowIoResponse {
+        inputs: vec![WorkflowIoNode {
+            node_id: "text-input-1".to_string(),
+            node_type: "text-input".to_string(),
+            name: Some("Input".to_string()),
+            description: None,
+            ports: vec![WorkflowIoPort {
+                port_id: "text".to_string(),
+                name: Some("Text".to_string()),
+                description: None,
+                data_type: Some("string".to_string()),
+                required: Some(false),
+                multiple: Some(false),
+            }],
+        }],
+        outputs: vec![WorkflowIoNode {
+            node_id: "text-output-1".to_string(),
+            node_type: "text-output".to_string(),
+            name: Some("Output".to_string()),
+            description: None,
+            ports: vec![WorkflowIoPort {
+                port_id: "text".to_string(),
+                name: Some("Text".to_string()),
+                description: None,
+                data_type: Some("string".to_string()),
+                required: Some(false),
+                multiple: Some(false),
+            }],
+        }],
+    }
+}
+
 pub(in crate::workflow::tests) struct InspectionHost {
     pub(in crate::workflow::tests) calls: Arc<Mutex<Vec<(String, String)>>>,
     pub(in crate::workflow::tests) state: Option<WorkflowGraphSessionStateView>,
@@ -208,36 +241,7 @@ impl WorkflowHost for MockWorkflowHost {
         &self,
         _workflow_id: &str,
     ) -> Result<WorkflowIoResponse, WorkflowServiceError> {
-        Ok(WorkflowIoResponse {
-            inputs: vec![WorkflowIoNode {
-                node_id: "text-input-1".to_string(),
-                node_type: "text-input".to_string(),
-                name: Some("Input".to_string()),
-                description: None,
-                ports: vec![WorkflowIoPort {
-                    port_id: "text".to_string(),
-                    name: Some("Text".to_string()),
-                    description: None,
-                    data_type: Some("string".to_string()),
-                    required: Some(false),
-                    multiple: Some(false),
-                }],
-            }],
-            outputs: vec![WorkflowIoNode {
-                node_id: "text-output-1".to_string(),
-                node_type: "text-output".to_string(),
-                name: Some("Output".to_string()),
-                description: None,
-                ports: vec![WorkflowIoPort {
-                    port_id: "text".to_string(),
-                    name: Some("Text".to_string()),
-                    description: None,
-                    data_type: Some("string".to_string()),
-                    required: Some(false),
-                    multiple: Some(false),
-                }],
-            }],
-        })
+        Ok(mock_workflow_io())
     }
 
     async fn runtime_capabilities(

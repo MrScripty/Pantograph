@@ -24,6 +24,8 @@ pumas-library = { workspace = true, optional = true }
 # Async/Serialization
 tokio.workspace = true
 async-trait.workspace = true
+futures-util.workspace = true
+reqwest = { workspace = true, optional = true }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
@@ -39,4 +41,4 @@ tempfile.workspace = true
 [features]
 default = ["desktop"]
 desktop = []
-model-library = ["dep:pumas-library"]
+model-library = ["dep:pumas-library", "dep:reqwest"]

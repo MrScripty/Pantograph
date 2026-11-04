@@ -117,6 +117,9 @@ pub(crate) fn runtime_host_input_value(
         WorkflowSchedulerTaskResultValue::U64(value) => {
             Ok(Some(RuntimeHostExecutionInputValue::U64(*value)))
         }
+        WorkflowSchedulerTaskResultValue::EmbeddingVector(value) => Ok(Some(
+            RuntimeHostExecutionInputValue::EmbeddingVector(value.clone()),
+        )),
         WorkflowSchedulerTaskResultValue::MediaArtifactRef(value) => Ok(Some(
             RuntimeHostExecutionInputValue::MediaArtifactRef(runtime_host_media_ref(value)),
         )),

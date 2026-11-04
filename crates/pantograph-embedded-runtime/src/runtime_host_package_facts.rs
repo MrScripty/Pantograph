@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use inference::ResolvedModelPackageFacts;
+use inference::{PumasArtifactEntryPath, ResolvedModelPackageFacts};
 use pantograph_runtime_host_contracts::ValidatedRuntimeHostExecutionRequest;
 use pumas_library::PumasError;
 use thiserror::Error;
@@ -32,10 +32,9 @@ impl RuntimeHostPumasPackageFactsResolver {
             .selector_access
             .resolve_model_package_facts(selected_model_ref.model_id.as_str())
             .await?;
-        let package_facts = validate_runtime_host_package_facts(
-            selected_model_ref,
-            decode_pumas_package_facts(raw_facts)?,
-        )?;
+        let package_facts = decode_pumas_package_facts(raw_facts)?;
+        validate_runtime_host_producer_package_identity(selected_model_ref, &package_facts)?;
+        let package_facts = validate_runtime_host_package_facts(selected_model_ref, package_facts)?;
         Ok(normalize_runtime_host_package_fact_identity(
             selected_model_ref,
             package_facts,
@@ -52,6 +51,35 @@ impl RuntimeHostPackageFactsResolver for RuntimeHostPumasPackageFactsResolver {
         self.resolve_for_model(selected_pumas_model_ref(request)?)
             .await
     }
+}
+
+fn validate_runtime_host_producer_package_identity(
+    selected_model_ref: &pantograph_dependency_planning::PumasModelRef,
+    package_facts: &ResolvedModelPackageFacts,
+) -> Result<(), RuntimeHostPumasPackageFactsError> {
+    let selected_model_id = pumas_library_model_id(selected_model_ref.model_id.as_str());
+    let producer_model_id = pumas_library_model_id(package_facts.model_ref.model_id.as_str());
+    if selected_model_id.trim_matches('/') != producer_model_id.trim_matches('/') {
+        return Err(RuntimeHostPumasPackageFactsError::ProducerModelMismatch {
+            selected_model_id: selected_model_ref.model_id.clone(),
+            producer_model_id: package_facts.model_ref.model_id.clone(),
+        });
+    }
+    if let (Some(selected_revision), Some(producer_revision)) = (
+        selected_model_ref.revision.as_ref(),
+        package_facts.model_ref.revision.as_ref(),
+    ) {
+        if selected_revision != producer_revision {
+            return Err(
+                RuntimeHostPumasPackageFactsError::ProducerRevisionMismatch {
+                    selected_model_id: selected_model_ref.model_id.clone(),
+                    selected_revision: selected_revision.clone(),
+                    producer_revision: producer_revision.clone(),
+                },
+            );
+        }
+    }
+    Ok(())
 }
 
 fn selected_pumas_model_ref(
@@ -154,13 +182,21 @@ fn path_free_model_entry_path(model_id: &str) -> String {
         .to_string()
 }
 
-fn is_path_free_artifact_entry(path: &str) -> bool {
+pub(crate) fn pumas_library_model_id(model_id: &str) -> String {
+    model_id
+        .strip_prefix("pumas://models/")
+        .unwrap_or(model_id)
+        .to_string()
+}
+
+pub(crate) fn is_path_free_artifact_entry(path: &str) -> bool {
     let trimmed = path.trim();
-    !trimmed.is_empty()
-        && !std::path::Path::new(trimmed).is_absolute()
-        && !trimmed
-            .split('/')
-            .any(|part| part.is_empty() || part == "." || part == "..")
+    !is_windows_drive_path(trimmed) && PumasArtifactEntryPath::parse(trimmed).is_ok()
+}
+
+fn is_windows_drive_path(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':'
 }
 
 fn decode_pumas_package_facts(
@@ -204,6 +240,21 @@ pub(crate) enum RuntimeHostPumasPackageFactsError {
     MissingDispatchDecision,
     #[error("Pumas package facts could not be decoded into the inference contract: {message}")]
     PackageFactsDecodeFailed { message: String },
+    #[error(
+        "Pumas package facts model '{producer_model_id}' do not match scheduler model '{selected_model_id}'"
+    )]
+    ProducerModelMismatch {
+        selected_model_id: String,
+        producer_model_id: String,
+    },
+    #[error(
+        "Pumas package facts revision '{producer_revision}' does not match scheduler revision '{selected_revision}' for model '{selected_model_id}'"
+    )]
+    ProducerRevisionMismatch {
+        selected_model_id: String,
+        selected_revision: String,
+        producer_revision: String,
+    },
     #[error(
         "Pumas package facts for model '{model_id}' use stale contract version {package_facts_contract_version}"
     )]
@@ -418,6 +469,61 @@ mod tests {
         assert_eq!(
             normalized.model_ref.selected_artifact_path.as_deref(),
             Some("image/stable-diffusion/tiny-sd/diffusers")
+        );
+    }
+
+    #[test]
+    fn producer_model_mismatch_fails_before_identity_normalization() {
+        let request = validated_runtime_host_request();
+        let selected_model_ref = selected_pumas_model_ref(&request).expect("selected model ref");
+        let mut package_facts = image_package_facts_for_request(selected_model_ref);
+        package_facts.model_ref.model_id = "pumas://models/other-model".to_string();
+
+        let error =
+            validate_runtime_host_producer_package_identity(selected_model_ref, &package_facts)
+                .expect_err("producer model mismatch must fail before normalization");
+
+        assert!(matches!(
+            error,
+            RuntimeHostPumasPackageFactsError::ProducerModelMismatch { .. }
+        ));
+    }
+
+    #[test]
+    fn producer_revision_mismatch_fails_before_identity_normalization() {
+        let request = validated_runtime_host_request();
+        let mut selected_model_ref = selected_pumas_model_ref(&request)
+            .expect("selected model ref")
+            .clone();
+        selected_model_ref.revision = Some("selected-revision".to_string());
+        let mut package_facts = image_package_facts_for_request(&selected_model_ref);
+        package_facts.model_ref.revision = Some("producer-revision".to_string());
+
+        let error =
+            validate_runtime_host_producer_package_identity(&selected_model_ref, &package_facts)
+                .expect_err("producer revision mismatch must fail before normalization");
+
+        assert!(matches!(
+            error,
+            RuntimeHostPumasPackageFactsError::ProducerRevisionMismatch { .. }
+        ));
+    }
+
+    #[test]
+    fn runtime_host_package_fact_identity_preserves_producer_revision_when_scheduler_omits_it() {
+        let request = validated_runtime_host_request();
+        let selected_model_ref = selected_pumas_model_ref(&request).expect("selected model ref");
+        let mut selected_model_ref = selected_model_ref.clone();
+        selected_model_ref.revision = None;
+        let mut package_facts = image_package_facts_for_request(&selected_model_ref);
+        package_facts.model_ref.revision = Some("producer-revision".to_string());
+
+        let normalized =
+            normalize_runtime_host_package_fact_identity(&selected_model_ref, package_facts);
+
+        assert_eq!(
+            normalized.model_ref.revision.as_deref(),
+            Some("producer-revision")
         );
     }
 

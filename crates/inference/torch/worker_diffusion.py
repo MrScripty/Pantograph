@@ -23,7 +23,10 @@ class _Admission(NamedTuple):
 _REQUIRED = {"unet", "vae", "text_encoder", "tokenizer", "scheduler"}
 _IDENTITIES = {
     "unet": ("diffusers", {"UNet2DConditionModel"}),
-    "vae": ("diffusers", {"AutoencoderKL"}),
+    # Stable Diffusion Turbo bundles may use the built-in lightweight VAE.
+    # Keep this explicit allowlist closed: metadata can select only these
+    # installed diffusers classes, never arbitrary Python code.
+    "vae": ("diffusers", {"AutoencoderKL", "AutoencoderTiny"}),
     "text_encoder": ("transformers", {"CLIPTextModel"}),
     "tokenizer": ("transformers", {"CLIPTokenizer", "CLIPTokenizerFast"}),
     "scheduler": ("diffusers", None),
