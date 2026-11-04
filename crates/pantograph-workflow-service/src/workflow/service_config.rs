@@ -92,7 +92,9 @@ impl WorkflowService {
             runtime_dispatch_assignment_repository: Arc::new(Mutex::new(
                 InMemoryWorkflowRuntimeDispatchAssignmentRepository::new(),
             )),
-            graph_session_store: Arc::new(GraphSessionStore::new()),
+            graph_session_store: Arc::new(
+                GraphSessionStore::new().with_node_registry(node_registry.clone()),
+            ),
             artifact_writer: None,
             artifact_format_settings: Arc::new(Mutex::new(ArtifactFormatSettings::default())),
             artifact_format_settings_path: None,
@@ -190,7 +192,8 @@ impl WorkflowService {
         provider: Arc<dyn InferenceInterfaceFactsProvider>,
     ) -> Self {
         self.graph_session_store = Arc::new(
-            GraphSessionStore::with_inference_interface_facts_provider(provider),
+            GraphSessionStore::with_inference_interface_facts_provider(provider)
+                .with_node_registry(self.node_registry.clone()),
         );
         self
     }
@@ -201,11 +204,14 @@ impl WorkflowService {
         inference_provider: Arc<dyn InferenceInterfaceFactsProvider>,
         provider: SharedDependencyEnvironmentProvider,
     ) -> Self {
-        self.graph_session_store = Arc::new(GraphSessionStore::with_timeout_and_providers(
-            std::time::Duration::from_secs(5 * 60),
-            inference_provider,
-            provider.clone(),
-        ));
+        self.graph_session_store = Arc::new(
+            GraphSessionStore::with_timeout_and_providers(
+                std::time::Duration::from_secs(5 * 60),
+                inference_provider,
+                provider.clone(),
+            )
+            .with_node_registry(self.node_registry.clone()),
+        );
         self.dependency_readiness_provider = Arc::new(DependencyEnvironmentService::new(provider));
         self
     }

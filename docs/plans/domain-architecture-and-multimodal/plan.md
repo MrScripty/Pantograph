@@ -302,6 +302,78 @@ Development Proportionality, Commit, Documentation, Architecture/Code Design,
 Contracts, Security, Concurrency/Resilience and Library/Rust API/Async guidance.
 The rest of this plan retains its historical standards baseline.
 
+## Admitted NodeLab/edit-session slice (2026-10-22)
+
+**Admission:** `continue` this Active plan under the delegated unfinished-path
+instruction. CN-01 is integrated in `2e517f58`, README PR79 in current main
+`285c4898`. Independent GPT-6.1 Sol High design review admits a bounded NodeLab
+graph-authoring surface before implementation. This does not author or install
+executable code. PR92's unique trained-text source/evidence and missing T3 gate
+remain separate and protected; CN-03 has its own worker and integration gate.
+
+**Outcome and contract:** NodeLab reads a versioned service-owned projection of
+host-admitted custom definitions and complete identities. The default desktop
+catalog is honestly empty; a composed host supplies nonempty registrations.
+Selecting an admitted node creates a separate edit-session draft with one text
+source per required input and one text sink per output, derived from host ports.
+Users edit source values, inspect backend diagnostics, save and reopen through
+existing graph APIs. Saved pins are never silently refreshed. Missing/stale
+implementations remain visible and blocking; recovery requires explicit new
+authoring. No direct edit-session execution, Local Agent, runtime publishing,
+arbitrary loader, new capability grant or static tool loop is enabled.
+
+The draft is constructed by the service from the exact selected identity, not
+from a client-supplied custom definition. The same immutable registry must reach
+graph-session construction, provider
+builders, canonicalization, response diagnostics and connection candidate/commit
+validation. Add requires the exact selected identity; custom data patches cannot
+change identity or add dynamic definitions. Imported invalid graphs remain
+inspectable without healing. Name-only custom insert-on-edge/insert-and-connect
+is explicitly unsupported; use pinned add plus explicit connections. The
+legacy generic palette stays built-in-only. CN-03 consumes saved graph pins and
+CN-01 scheduler invocation, not NodeLab state or a second execution route.
+
+**Composition and write set:** registry/catalog owns admitted facts; graph
+sessions own authored state, undo and validation; NodeLab owns local interaction
+and observes service responses; existing store owns persistence. Stable
+interfaces are the versioned read projection and existing pinned graph/mutation
+contracts. This avoids duplicating admission or execution in the frontend.
+Change service `custom_nodes`, `graph`, graph API/config and related tests;
+NodeLab presenters/controller/page and narrow workflow transport projections;
+desktop command wiring; a bounded real-host example/browser probe and affected
+documentation. No scheduler-loop core, text runtime/readiness, root README or
+PR92 edits. Branch `feat/nodelab-trusted-catalog`, worktree
+`/workspace/pantograph-nodelab`, base `285c4898`, target `main`. Preserve source,
+branches and evidence; parent coordinates serial integration if CN-03 intersects.
+
+**Acceptance:** focused admission/edit-session refusal tests, real save/reopen
+and connection candidate/commit tests, provider-builder registry retention,
+frontend decoder/lifecycle tests, and real-browser pointer/keyboard draft →
+edit → save → reopen interaction through an injected Rust host. Browser evidence
+does not qualify native Tauri startup. Native compile/smoke is attempted only
+where available and its actual limits recorded. Required CI, independent source
+review and current-main recheck precede merge under the later cleanup authority;
+no gate waiver, evidence-weakening rerun or persistent access expansion. Status
+`Verifying`; next slice complete independent review, current-main/CI gates and
+serial integration. Failed replacement preserves the current draft; failed close
+transfers exact session IDs to an app-scoped, user-retryable cleanup owner. Standards baseline `0fc92a2`
+continues, adding routed Frontend, TypeScript/Async, Accessibility, IPC,
+Persistence, protocol/evolution and GUI verification detail to the CN-01 routes.
+
+**Serial reconciliation (2026-10-22):** CN-03 PR94 is integrated as `46aad584`.
+Continue CN-02 on that current-main base with the same production contract.
+Preserve both admitted slices and CN-03 source unchanged. Add one edit-session
+integration regression for a saved/reopened exact loop pin: its admitted catalog
+accepts it, changed/missing catalogs retain it with blocking diagnostics, and an
+invalid new pin is rejected without mutation. This tests the shared-registry
+handoff rather than adding loop authoring or execution. Rerun both service suites,
+frontend/static gates and the real-host browser flow; bind fresh combined-source
+evidence, obtain independent review, then pass fresh exact-head CI and current-main
+rechecks. PR94 post-merge CI must also pass before PR95 merges normally.
+Add explicit hosted discovery/execution of all ten custom-node service tests;
+keep CN-03's existing fifteen-test loop gate unchanged and name the new
+edit-session regression outside that substring filter.
+
 ## Admitted CN-03 pure tool-loop slice (2026-10-22)
 
 **Authority and status:** The user authorized unfinished Pantograph paths and

@@ -40,6 +40,33 @@ impl GraphSessionStore {
                     request.node_id
                 )));
             }
+            let original = state
+                .graph
+                .find_node(&request.node_id)
+                .expect("checked node");
+            if self
+                .node_registry
+                .custom_nodes
+                .get(&original.node_type)
+                .is_some()
+                || original
+                    .data
+                    .get(crate::custom_nodes::CUSTOM_NODE_IDENTITY_FIELD)
+                    .is_some()
+            {
+                let mut candidate = original.clone();
+                merge_node_data(&mut candidate.data, request.data.clone());
+                if candidate
+                    .data
+                    .get(crate::custom_nodes::CUSTOM_NODE_IDENTITY_FIELD)
+                    != original
+                        .data
+                        .get(crate::custom_nodes::CUSTOM_NODE_IDENTITY_FIELD)
+                    || candidate.data.get("definition") != original.data.get("definition")
+                {
+                    return Err(WorkflowServiceError::InvalidRequest("custom-node identity/definition cannot be patched; explicitly remove and recreate from the admitted catalog".into()));
+                }
+            }
             state.push_undo_snapshot();
             let node = state.graph.find_node_mut(&request.node_id).ok_or_else(|| {
                 WorkflowServiceError::InvalidRequest(format!(
@@ -110,6 +137,24 @@ impl GraphSessionStore {
             let mut state = handle.lock().await;
             state.touch();
             let before_graph = state.graph.clone();
+            self.node_registry
+                .validate_custom_node_identity(&request.node)
+                .map_err(|error| WorkflowServiceError::InvalidRequest(error.to_string()))?;
+            if request
+                .node
+                .data
+                .get(crate::custom_nodes::CUSTOM_NODE_IDENTITY_FIELD)
+                .is_some()
+                && self
+                    .node_registry
+                    .custom_nodes
+                    .get(&request.node.node_type)
+                    .is_none()
+            {
+                return Err(WorkflowServiceError::InvalidRequest(
+                    "custom-node implementation is unavailable".into(),
+                ));
+            }
             state.push_undo_snapshot();
             let node_id = request.node.id.clone();
             state.graph.nodes.push(request.node);

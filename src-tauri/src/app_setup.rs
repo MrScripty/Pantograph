@@ -461,6 +461,9 @@ pub fn run_app() -> AppStartupResult<()> {
             crate::llm::reset_recovery_state,
             // Workflow commands
             crate::workflow::commands::validate_workflow_connection,
+            crate::workflow::commands::get_custom_node_authoring_catalog,
+            crate::workflow::commands::create_custom_node_draft,
+            crate::workflow::commands::get_node_lab_draft,
             crate::workflow::commands::get_node_definitions,
             crate::workflow::commands::get_node_definitions_by_category,
             crate::workflow::commands::get_node_definition,

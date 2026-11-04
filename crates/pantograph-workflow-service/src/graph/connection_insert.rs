@@ -41,6 +41,13 @@ fn resolve_insert_definition<'a>(
     registry: &'a NodeRegistry,
     node_type: &str,
 ) -> Result<&'a NodeDefinition, ConnectionRejection> {
+    if registry.custom_nodes.get(node_type).is_some() {
+        return Err(ConnectionRejection {
+            reason: ConnectionRejectionReason::UnknownInsertNodeType,
+            message: "custom-node insertion by name is unsupported; add an exactly pinned node and connect its endpoints".into(),
+            contract_diagnostic: None,
+        });
+    }
     registry
         .get_definition(node_type)
         .ok_or_else(|| ConnectionRejection {

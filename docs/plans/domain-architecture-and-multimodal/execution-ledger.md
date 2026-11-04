@@ -872,3 +872,93 @@ Accepted stop-string/PR60 and all seed/precision/repair/paused histories remain
 separate. Controlled package/readiness/dispatch/session facts and untrained CPU
 models do not qualify live Pumas, pretrained quality, GPU, desktop or native
 batching/throughput. Full plan acceptance and parent publication remain separate.
+
+## 2026-10-22 — NodeLab trusted-node authoring
+
+Continued the admitted CN-02 slice on main `285c4898` after CN-01/README merges.
+The [consumer contract](../../custom-nodes.md#nodelab-graph-authoring) owns the
+read-only versioned catalog, exact-selection server-built drafts, shared edit
+registry, pin-preserving mutations and saved/reopened behavior. Default desktop
+has no custom registrations; the separate real Rust qualification host supplies
+one compiled pure transform. No code loader, execution UI or tool grant is added.
+Independent GPT-6.1 Sol High review accepted after repairing failed replacement
+loss, explicit-null diagnostic decoding and close-failure ownership/recovery.
+
+[Qualification](evidence/nodelab-authoring/qualification.json) retains source
+bindings, actual Chromium→Rust→filesystem user-workflow evidence and the native
+failure. Service tests pass 1,068 library +65 integration, zero failures/ignored;
+740 frontend tests pass including ten focused parser/controller/presenter cases.
+Formatting, typecheck, production frontend build, lint, critical/a11y gates,
+scheduler-only guard and traceability tests pass. All-target package Clippy
+retains only the existing inference dead-field warning. Initial new fixtures used
+an unexported provider and a nonexistent response field; corrected against the
+actual owning APIs, preserving the assertions. The first browser Enter simulation
+omitted character text and did not activate the button; proper CDP key events
+then passed the same workflow assertions, with no pointer fallback for that gate.
+Full lint required keys on stateless diagnostic rows; repaired. Final browser
+evidence loads the actual application stylesheet and checks nonzero focus outline.
+
+Native `cargo check --locked -p pantograph --bin pantograph --no-default-features`
+is unavailable at glib-sys because this environment lacks `glib-2.0.pc`; GTK and
+WebKit development packages are also absent. No native/desktop startup claim or
+persistent access change is made. PR92 `afe33029` remains open with its unique
+trained-text source/evidence and missing T3 gate unchanged. CN-03 PR94 integrates
+first by parent instruction; CN-02 must then reconcile current main, preserve its
+registry/loop validations, rerun combined affected tests and pass exact-head CI
+before merge. The local/remote feature branch and worktree are retained pending
+that disposition, with source and evidence preserved.
+
+While dependency integration was pending, a reachable catalog-refresh failure
+left earlier Create choices visible. The focused regression failed on `802544a0`
+and passes after clearing/publishing the catalog before transport; authored draft
+and saved path remain unchanged. The same mounted real-browser flow passes
+failed refresh and recovery. Its first probe inspected old-session closure before
+Reopen completed; bounded observation now waits for replacement completion and
+retains the original closure assertion. Original browser/native receipts remain;
+the qualification manifest binds the repaired source and additional receipts.
+No backend, scheduler or audit behavior changed. This repair remains local until
+the required PR94 integration/current-main qualification.
+
+Hosted PR95 source/build/native-IPC checks passed on `802544a0`; the required
+audit failed with an actual advisory-bulk HTTP 503. PR94 was likewise blocked
+on audit service failures at that stage. No audit retries or gate changes were requested here.
+Local native provisioning inspection stopped when `apt-cache policy` was denied
+reading `/etc/apt/apt.conf.d/80-applied-apt-retries`; no package installation or
+privileged retry was attempted. This does not qualify native startup/interaction.
+
+
+## 2026-10-22 — Serial CN-02/CN-03 reconciliation
+
+PR94 passed its required exact-head checks and merged as `46aad584`. A normal
+merge (`0acae31f`) incorporates that current main into the retained NodeLab branch;
+only plan/issue conflicts required resolution, preserving both admitted slices.
+CN-03 production registry/loop/scheduler code remains unchanged. The NodeLab
+[handoff](../../custom-nodes.md#nodelab-graph-authoring) distinguishes individual
+CN-01 authoring from future host-pinned loop-template authoring: no UI tool grants,
+optional loop ports or second execution route are introduced.
+
+The combined edit-session regression saves/reopens an exact loop pin, accepts its
+admitted catalog, preserves it with blocking diagnostics under changed/missing
+catalogs, and refuses invalid new pins without snapshot/revision mutation or
+callback invocation. Hosted coverage now explicitly discovers/runs all ten
+custom-node workflow tests. The new regression is named outside the existing
+`tool_loop` substring filter; that original fifteen-test discovery/execution gate
+is unchanged. Local exact commands discover and pass both 15 and 10 tests.
+
+The [combined qualification](evidence/nodelab-authoring/qualification.json) binds
+28 source files and retains seven receipts, including fresh 1,084 library +65
+integration tests (1,149 total, zero failed/ignored), both CI discovery/run filters
+and styled Chromium → rebuilt Rust host → filesystem interaction. All eight
+browser claims pass, including failed catalog refresh/recovery without losing
+saved draft/path. The final frontend suite passes 740 tests; formatting,
+typecheck, full/critical/a11y lint, production frontend build, scheduler-only guard
+and 28 traceability tests pass. Original browser, refresh-red and missing-GLib
+receipts remain preserved. Final package all-target Clippy passes with only the
+existing inference dead-field warning. Local native startup/interaction remains unqualified;
+the recorded APT read denial was not retried or bypassed.
+
+At this qualification stage, PR94 post-merge workflows and PR95 final independent
+review/fresh exact-head CI/current-main rechecks still gate normal integration.
+No old-head audit retry, dependency suppression, lockfile change, text-readiness
+edit or branch deletion was performed. PR92's unique trained-text source/evidence
+and missing T3 gate remain separate.

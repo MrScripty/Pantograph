@@ -1,3 +1,4 @@
+mod custom_node_authoring_api;
 #[cfg(test)]
 use async_trait::async_trait;
 use std::path::PathBuf;
