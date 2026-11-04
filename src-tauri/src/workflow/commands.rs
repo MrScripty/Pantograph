@@ -49,6 +49,40 @@ pub fn validate_workflow_connection(source_type: PortDataType, target_type: Port
     super::workflow_definition_commands::validate_workflow_connection(source_type, target_type)
 }
 
+/// Read-only host admissions; no registration or code upload command.
+#[command]
+pub fn get_custom_node_authoring_catalog(
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> pantograph_workflow_service::custom_nodes::authoring::CustomNodeAuthoringCatalog {
+    workflow_service.custom_node_authoring_catalog()
+}
+
+#[command]
+pub async fn create_custom_node_draft(
+    request: pantograph_workflow_service::custom_nodes::authoring::CustomNodeDraftRequest,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<pantograph_workflow_service::WorkflowGraphEditSessionGraphResponse, String> {
+    workflow_service
+        .create_custom_node_draft(request)
+        .await
+        .map_err(|error| error.to_envelope_json())
+}
+
+#[command]
+pub async fn get_node_lab_draft(
+    execution_id: String,
+    workflow_service: State<'_, SharedWorkflowService>,
+) -> Result<pantograph_workflow_service::WorkflowGraphEditSessionGraphResponse, String> {
+    workflow_service
+        .workflow_graph_get_edit_session_graph(
+            pantograph_workflow_service::WorkflowGraphEditSessionGraphRequest {
+                session_id: execution_id,
+            },
+        )
+        .await
+        .map_err(|error| error.to_envelope_json())
+}
+
 #[command]
 pub fn get_node_definitions() -> Vec<NodeDefinition> {
     super::workflow_definition_commands::get_node_definitions()

@@ -20,9 +20,10 @@ use super::types::WorkflowGraph;
 
 const DEFAULT_MAX_UNDO_SNAPSHOTS: usize = 64;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub(super) struct GraphEditSession {
     pub(super) graph: WorkflowGraph,
+    node_registry: std::sync::Arc<NodeRegistry>,
     workflow_id: Option<String>,
     undo_stack: Vec<WorkflowGraph>,
     redo_stack: Vec<WorkflowGraph>,
@@ -31,10 +32,15 @@ pub(super) struct GraphEditSession {
 }
 
 impl GraphEditSession {
-    pub(super) fn new(mut graph: WorkflowGraph, workflow_id: Option<String>) -> Self {
+    pub(super) fn new(
+        mut graph: WorkflowGraph,
+        workflow_id: Option<String>,
+        node_registry: std::sync::Arc<NodeRegistry>,
+    ) -> Self {
         graph = hydrate_embedding_emit_metadata_flags(graph);
         let mut session = Self {
             graph,
+            node_registry,
             workflow_id: workflow_id.and_then(normalize_optional_session_text),
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
@@ -70,6 +76,7 @@ impl GraphEditSession {
         build_graph_session_response_with_projection(
             session_id,
             &self.graph,
+            &self.node_registry,
             None,
             phase6_memory_impact_projection(self.last_memory_impact.clone()),
         )
@@ -94,6 +101,7 @@ impl GraphEditSession {
         build_graph_session_response_with_projection(
             session_id,
             &self.graph,
+            &self.node_registry,
             workflow_event,
             projection,
         )
@@ -191,7 +199,7 @@ impl GraphEditSession {
 
     pub(super) fn canonicalize_graph(&mut self) {
         let graph = std::mem::take(&mut self.graph);
-        self.graph = canonicalize_workflow_graph(graph, &NodeRegistry::new());
+        self.graph = canonicalize_workflow_graph(graph, &self.node_registry);
         self.graph.refresh_derived_graph();
     }
 }
@@ -199,12 +207,14 @@ impl GraphEditSession {
 pub(super) fn build_graph_session_response_with_projection(
     session_id: &str,
     graph: &WorkflowGraph,
+    registry: &NodeRegistry,
     workflow_event: Option<node_engine::WorkflowEvent>,
     projection: Option<WorkflowGraphSessionStateProjection>,
 ) -> WorkflowGraphEditSessionGraphResponse {
-    super::session_contract::build_graph_session_response_with_state(
+    super::session_contract::build_graph_session_response_with_registry(
         session_id,
         graph,
+        registry,
         workflow_event,
         projection.as_ref(),
     )

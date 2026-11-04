@@ -1,640 +1,90 @@
 <script lang="ts">
-  // Node Editor (spec "Node Editor"). Authoring has no backend in this build, so
-  // the page reads the built-in definitions from the same store the Graph
-  // palette lists (filled by the graph session at startup and by Graph on
-  // mount) and renders every authoring control disabled with its reason.
-  import { nodeDefinitions } from '../../stores/workflowStore';
-  import {
-    EmptyState,
-    GroupHeader,
-    ListRow,
-    Panel,
-    StatusGlyph,
-    DimensionLine,
-  } from './ui';
-  import {
-    NODE_LAB_CATEGORIES,
-    NODE_LAB_EXECUTION_MODES,
-    NODE_LAB_IO_BINDINGS,
-    buildNodeLabList,
-    nodeLabAuthoringNotice,
-    nodeLabCategoryLabel,
-    nodeLabDisabledReason,
-    nodeLabExecutionModeLabel,
-    nodeLabIoBindingLabel,
-    nodeLabSummaryLine,
-    projectNodeLabDefinition,
-    resolveNodeLabSelection,
-  } from './nodeLabPresenters';
+  import { onMount } from 'svelte';
+  import { nodeLabService } from '../../services/workflow/customNodeAuthoring';
+  import { NodeLabController, type NodeLabView } from './nodeLabController';
+  import { buildNodeLabStatusRows, nodeLabTrustMessage } from './nodeLabPresenters';
 
-  const notice = nodeLabAuthoringNotice();
-  const fieldReason = nodeLabDisabledReason('edit_field');
-  const removeReason = nodeLabDisabledReason('remove_port');
-  const addReason = nodeLabDisabledReason('add_port');
-
-  let query = $state('');
-  let selectedNodeType = $state<string | null>(null);
-  let builtInExpanded = $state(true);
-
-  let list = $derived(buildNodeLabList($nodeDefinitions, query));
-  let summary = $derived(nodeLabSummaryLine($nodeDefinitions));
-  let selected = $derived(resolveNodeLabSelection($nodeDefinitions, selectedNodeType));
-  let view = $derived(selected ? projectNodeLabDefinition(selected) : null);
-  let categoryOptions = $derived(
-    view && !NODE_LAB_CATEGORIES.includes(view.category as (typeof NODE_LAB_CATEGORIES)[number])
-      ? [...NODE_LAB_CATEGORIES, view.category]
-      : [...NODE_LAB_CATEGORIES],
-  );
-  let groupCount = $derived(list.matched === list.total ? list.total : `${list.matched} of ${list.total}`);
+  let view = $state<NodeLabView>({ catalog: null, draft: null, savedPath: '', busy: false, error: null, notice: '', pendingCleanup: 0 });
+  let name = $state('custom-node-workflow');
+  let path = $state('');
+  let controller: NodeLabController;
+  onMount(() => {
+    controller = new NodeLabController(nodeLabService, state => { view = state; });
+    void controller.loadCatalog();
+    return () => { void controller.dispose(); };
+  });
+  const statusRows = buildNodeLabStatusRows();
 </script>
 
-<div class="pg-main h-full">
-  <DimensionLine label={summary} />
-
-  <aside class="nl-notice pg-small" aria-label="Node authoring availability">
-    <StatusGlyph state="queued" />
-    <p><strong>{notice.headline}</strong> {notice.sentence}</p>
-  </aside>
-
-  <div class="nl-columns">
-    <Panel label="Node definitions" width="300px">
-      {#snippet top()}
-        <div class="nl-search">
-          <label for="node-lab-search" class="pg-sr-only">Search built-in nodes</label>
-          <input
-            id="node-lab-search"
-            class="pg-field"
-            type="search"
-            placeholder="Search built-in nodes"
-            bind:value={query}
-          />
-          <button class="pg-btn" type="button" aria-disabled="true" title={nodeLabDisabledReason('new_node')}>
-            New node
-          </button>
-        </div>
-      {/snippet}
-
-      {#each list.groups as group (group.id)}
-        <GroupHeader
-          label={group.label}
-          count={groupCount}
-          expanded={builtInExpanded}
-          controls="node-lab-built-in"
-          ontoggle={() => (builtInExpanded = !builtInExpanded)}
-        />
-        <div id="node-lab-built-in" hidden={!builtInExpanded}>
-          {#each group.rows as row (row.nodeType)}
-            <ListRow
-              glyph="idle"
-              name={row.label}
-              version={row.nodeType}
-              statusLabel={row.categoryLabel}
-              context={row.context}
-              selected={row.nodeType === view?.nodeType}
-              onselect={() => (selectedNodeType = row.nodeType)}
-            />
-          {/each}
-        </div>
+<section class="h-full overflow-auto bg-neutral-950 p-6 text-sm" aria-label="NodeLab authoring" aria-busy={view.busy}>
+  <h1 class="text-base font-semibold text-neutral-100">NodeLab</h1>
+  <p class="mt-2 max-w-3xl text-neutral-400">{nodeLabTrustMessage()}</p>
+  <dl class="mt-4 grid gap-3 sm:grid-cols-3">
+    {#each statusRows as row (row.label)}
+      <div class="border border-neutral-800 bg-neutral-900/40 p-3">
+        <dt class="text-xs uppercase tracking-[0.18em] text-neutral-500">{row.label}</dt>
+        <dd class="mt-2 text-neutral-300">{row.value}</dd>
+      </div>
+    {/each}
+  </dl>
+  {#if view.error}<p role="alert" class="mt-4 text-red-300">{view.error}</p>{/if}
+  <p role="status" class="mt-3 text-cyan-200">{view.busy ? 'Working…' : view.notice}</p>
+  {#if view.pendingCleanup}
+    <p role="alert" class="mt-3 text-amber-200">{view.pendingCleanup} previous NodeLab sessions could not be closed. Close them before creating or reopening a draft.</p>
+    <button type="button" class="mt-2 rounded border border-neutral-600 px-3 py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-40" disabled={view.busy} onclick={() => controller.retryCleanup()}>Retry session cleanup</button>
+  {/if}
+  <h2 class="mt-5 font-medium text-neutral-200">Admitted nodes</h2>
+  <button type="button" class="mt-2 rounded border border-neutral-600 px-3 py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-40" disabled={view.busy} onclick={() => controller.loadCatalog()}>Refresh catalog</button>
+  {#if view.catalog?.length === 0}
+    <p class="mt-3 text-neutral-400">This host has no admitted custom nodes. A host maintainer must register a trusted implementation before creating a new draft.</p>
+  {:else if view.catalog}
+    <ul class="mt-3 grid gap-3 lg:grid-cols-2">
+      {#each view.catalog as entry (entry.identity.node_type)}
+        <li class="border border-neutral-700 p-4">
+          <h3 class="font-medium text-neutral-100">{entry.label}</h3>
+          <p class="mt-1 text-neutral-400">{entry.description}</p>
+          <p class="mt-2 text-xs text-neutral-400">{entry.inputs.length} string inputs · {entry.outputs.length} string outputs · Trusted in-process</p>
+          <details class="mt-2 break-all text-xs text-neutral-500">
+            <summary class="cursor-pointer focus-visible:outline focus-visible:outline-cyan-400">Implementation identity</summary>
+            <pre class="mt-2 whitespace-pre-wrap">{JSON.stringify(entry.identity, null, 2)}</pre>
+          </details>
+          <button type="button" class="mt-3 rounded border border-cyan-700 px-3 py-2 text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-40" disabled={view.busy} onclick={() => controller.create(entry)}>Create {entry.label} draft</button>
+        </li>
       {/each}
-      {#if list.emptyText}
-        <p class="pg-empty pg-small nl-empty">{list.emptyText}</p>
-      {/if}
-
-      {#snippet footer()}
-        <span class="pg-small pg-muted">Built-in nodes are read-only. This is the list the Graph palette offers.</span>
-      {/snippet}
-    </Panel>
-
-    {#if view}
-      <Panel label="Definition">
-        <div class="nl-head">
-          <div class="nl-head-text">
-            <h2 class="pg-title">{view.label}</h2>
-            <div class="pg-mono pg-muted">{view.nodeType}</div>
-          </div>
-          <div class="nl-actions">
-            <button class="pg-btn" type="button" aria-disabled="true" title={nodeLabDisabledReason('save_draft')}>
-              Save draft
-            </button>
-            <button
-              class="pg-btn pg-btn-primary"
-              type="button"
-              aria-disabled="true"
-              title={nodeLabDisabledReason('publish')}
-            >
-              Publish to runtime
-            </button>
-          </div>
-        </div>
-
-        <div class="pg-sec nl-form">
-          <label class="pg-fl">
-            Label
-            <input class="pg-field" value={view.label} disabled title={fieldReason} />
+    </ul>
+  {/if}
+  <form class="mt-6 flex flex-wrap items-end gap-2" onsubmit={event => { event.preventDefault(); void controller.reopen(path); }}>
+    <label class="grid flex-1 gap-1 text-neutral-300">Saved workflow path
+      <input class="min-w-64 rounded border border-neutral-600 bg-neutral-900 p-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400" bind:value={path} required disabled={view.busy} />
+    </label>
+    <button class="rounded border border-neutral-600 px-3 py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-40" disabled={view.busy || !path.trim()}>Reopen saved workflow</button>
+  </form>
+  {#if view.savedPath}<p class="mt-3 break-all text-neutral-300">Saved: <code>{view.savedPath}</code></p>{/if}
+  {#if view.draft}
+    <div class="mt-6 border border-neutral-700 p-4">
+      <h2 class="font-medium text-neutral-100">Workflow draft</h2>
+      <p class="mt-2 text-neutral-400">{view.draft.graph.nodes.length} nodes · {view.draft.graph.edges.length} connections. Saving preserves the selected implementation identity. Run saved workflows from Scheduler.</p>
+      {#if view.draft.graph_diagnostics.length}
+        <ul class="mt-3 text-amber-200" aria-label="Graph diagnostics">
+          {#each view.draft.graph_diagnostics as diagnostic, index (index)}
+            <li>{diagnostic.blocking_submission ? 'Blocks execution: ' : ''}{diagnostic.message}</li>
+          {/each}
+        </ul>
+      {:else}<p class="mt-3 text-emerald-200">Graph contract valid</p>{/if}
+      {#each view.draft.graph.nodes.filter(node => node.node_type === 'text-input') as node (node.id)}
+        <form class="mt-4" onsubmit={event => { event.preventDefault(); const input = new FormData(event.currentTarget).get('text'); if (typeof input === 'string') void controller.update(node, input); }}>
+          <label class="grid gap-1 text-neutral-300">{typeof node.data.label === 'string' ? node.data.label : node.id}
+            <textarea name="text" class="rounded border border-neutral-600 bg-neutral-900 p-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400" disabled={view.busy} value={typeof node.data.text === 'string' ? node.data.text : ''}></textarea>
           </label>
-          <label class="pg-fl">
-            Category
-            <select class="pg-field" disabled title={fieldReason}>
-              {#each categoryOptions as category (category)}
-                <option value={category} selected={category === view.category}>
-                  {nodeLabCategoryLabel(category)}
-                </option>
-              {/each}
-            </select>
-          </label>
-          <label class="pg-fl">
-            Execution
-            <select class="pg-field" disabled title={fieldReason}>
-              {#each NODE_LAB_EXECUTION_MODES as mode (mode)}
-                <option value={mode} selected={mode === view.executionMode}>{nodeLabExecutionModeLabel(mode)}</option>
-              {/each}
-              {#if !(NODE_LAB_EXECUTION_MODES as string[]).includes(view.executionMode)}
-                <option value={view.executionMode} selected>{view.executionModeLabel}</option>
-              {/if}
-            </select>
-          </label>
-          <label class="pg-fl">
-            I/O binding
-            <select class="pg-field" disabled title={fieldReason}>
-              {#each NODE_LAB_IO_BINDINGS as origin (origin)}
-                <option value={origin} selected={origin === view.ioBindingOrigin}>{nodeLabIoBindingLabel(origin)}</option>
-              {/each}
-              {#if !(NODE_LAB_IO_BINDINGS as string[]).includes(view.ioBindingOrigin)}
-                <option value={view.ioBindingOrigin} selected>{view.ioBindingLabel}</option>
-              {/if}
-            </select>
-          </label>
-          <label class="pg-fl nl-wide">
-            Description
-            <textarea class="pg-field" rows="2" value={view.description} disabled title={fieldReason}></textarea>
-          </label>
-        </div>
-
-        <section class="pg-sec" aria-labelledby="node-lab-inputs">
-          <h3 id="node-lab-inputs">Inputs</h3>
-          {#if view.inputs.length > 0}
-            <table class="nl-ports">
-              <thead>
-                <tr>
-                  <th scope="col">Name</th>
-                  <th scope="col">Type</th>
-                  <th scope="col">Default</th>
-                  <th scope="col">Required</th>
-                  <th scope="col"><span class="pg-sr-only">Remove</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                {#each view.inputs as port (port.id)}
-                  <tr>
-                    <td>
-                      <input class="pg-field" value={port.label} aria-label="Input {port.label} name" disabled title={fieldReason} />
-                      {#if port.idNote || port.description}
-                        <span class="nl-portnote">
-                          {#if port.idNote}<span class="pg-mono">{port.idNote}</span>{/if}{#if port.idNote && port.description}, {/if}{port.description ?? ''}
-                        </span>
-                      {/if}
-                    </td>
-                    <td><input class="pg-field" value={port.dataType} aria-label="Input {port.label} type" disabled title={fieldReason} /></td>
-                    <td><input class="pg-field" value={port.defaultText} aria-label="Input {port.label} default" disabled title={fieldReason} /></td>
-                    <td class="nl-req">{port.requirement}</td>
-                    <td>
-                      <button class="nl-rm" type="button" aria-label="Remove input {port.label}" disabled title={removeReason}>×</button>
-                    </td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          {:else}
-            <p class="pg-small pg-muted nl-none">This node has no inputs.</p>
-          {/if}
-          <button class="pg-tgl nl-add" type="button" aria-disabled="true" title={addReason}>Add input</button>
-        </section>
-
-        <section class="pg-sec" aria-labelledby="node-lab-outputs">
-          <h3 id="node-lab-outputs">Outputs</h3>
-          {#if view.outputs.length > 0}
-            <table class="nl-ports">
-              <thead>
-                <tr>
-                  <th scope="col">Name</th>
-                  <th scope="col">Type</th>
-                  <th scope="col"><span class="pg-sr-only">Remove</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                {#each view.outputs as port (port.id)}
-                  <tr>
-                    <td>
-                      <input class="pg-field" value={port.label} aria-label="Output {port.label} name" disabled title={fieldReason} />
-                      {#if port.idNote || port.description}
-                        <span class="nl-portnote">
-                          {#if port.idNote}<span class="pg-mono">{port.idNote}</span>{/if}{#if port.idNote && port.description}, {/if}{port.description ?? ''}
-                        </span>
-                      {/if}
-                    </td>
-                    <td><input class="pg-field" value={port.dataType} aria-label="Output {port.label} type" disabled title={fieldReason} /></td>
-                    <td>
-                      <button class="nl-rm" type="button" aria-label="Remove output {port.label}" disabled title={removeReason}>×</button>
-                    </td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          {:else}
-            <p class="pg-small pg-muted nl-none">This node has no outputs.</p>
-          {/if}
-          <button class="pg-tgl nl-add" type="button" aria-disabled="true" title={addReason}>Add output</button>
-        </section>
-
-        <section class="pg-sec" aria-labelledby="node-lab-implementation">
-          <h3 id="node-lab-implementation">Implementation</h3>
-          <div class="pg-code">{view.implementationText}</div>
-        </section>
-      </Panel>
-
-      <Panel label="Preview and checks" width="320px">
-        {#snippet top()}
-          <div class="nl-preview-head">
-            <h2 class="nl-preview-title">On the canvas</h2>
-            <span class="pg-muted pg-small">preview</span>
-          </div>
-        {/snippet}
-
-        <div class="nl-stage">
-          <div class="nl-gnode">
-            <div class="nl-nh">
-              <StatusGlyph state="idle" small />
-              <span class="nl-nh-label">{view.label}</span>
-              <span class="pg-mono nl-nh-type">{view.nodeType}</span>
-            </div>
-            <div class="nl-pts">
-              <div class="nl-pcol">
-                {#each view.inputs as port (port.id)}
-                  <div class="nl-pt nl-pt-in" title={port.dataType}><span>{port.label}</span></div>
-                {/each}
-              </div>
-              <div class="nl-pcol">
-                {#each view.outputs as port (port.id)}
-                  <div class="nl-pt nl-pt-out" title={port.dataType}><span>{port.label}</span></div>
-                {/each}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <section class="pg-sec nl-side-sec" aria-labelledby="node-lab-checks">
-          <h3 id="node-lab-checks">Checks</h3>
-          <ul class="nl-checks">
-            {#each view.checks as check (check.text)}
-              <li><StatusGlyph state={check.glyph} small /><span>{check.text}</span></li>
-            {/each}
-          </ul>
-        </section>
-
-        <section class="pg-sec nl-side-sec" aria-labelledby="node-lab-try">
-          <h3 id="node-lab-try">Try it</h3>
-          <p class="pg-small pg-muted nl-try-text">
-            Runs the node once with sample inputs on the local engine, outside any workflow.
-          </p>
-          <button class="pg-btn pg-btn-sm" type="button" aria-disabled="true" title={nodeLabDisabledReason('try')}>
-            Try with sample inputs
-          </button>
-        </section>
-      </Panel>
-    {:else}
-      <EmptyState
-        label="Definition"
-        question="No node definitions are loaded yet."
-        sentence="Pantograph reads the built-in nodes from the engine when the app starts and again when Graph opens. They appear here once the engine answers."
-      />
-    {/if}
-  </div>
-</div>
-
-<style>
-  .nl-notice {
-    flex: none;
-    display: flex;
-    gap: 10px;
-    align-items: flex-start;
-    padding: 8px 12px;
-    border: 1px solid var(--pg-border);
-    border-radius: 4px;
-    background: var(--pg-panel-head);
-  }
-
-  .nl-notice p {
-    margin: 0;
-  }
-
-  .nl-notice strong {
-    color: var(--pg-text-bright);
-  }
-
-  .nl-columns {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    gap: 14px;
-    align-items: stretch;
-  }
-
-  .nl-search {
-    display: flex;
-    gap: 8px;
-  }
-
-  .nl-search input {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .nl-empty {
-    margin: 0;
-  }
-
-  .nl-head {
-    padding: 16px 18px 12px;
-    display: flex;
-    gap: 16px;
-    align-items: flex-start;
-    flex-wrap: wrap;
-  }
-
-  .nl-head-text {
-    flex: 1 1 220px;
-    min-width: 0;
-  }
-
-  .nl-head-text h2 {
-    margin: 0;
-    overflow-wrap: anywhere;
-  }
-
-  .nl-head-text .pg-mono {
-    margin-top: 2px;
-  }
-
-  .nl-actions {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .nl-form {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
-    gap: 10px 14px;
-  }
-
-  .nl-form .nl-wide {
-    grid-column: 1 / -1;
-  }
-
-  .nl-form textarea.pg-field {
-    height: auto;
-    padding: 6px 10px;
-    resize: none;
-    font-family: var(--pg-font-mono);
-    font-size: 12px;
-    line-height: 1.5;
-  }
-
-  /* Read-only content stays legible; the disabled state is carried by the
-     cursor, the title and the notice above, not by fading the text. */
-  .pg-field:disabled {
-    color: var(--pg-text-soft);
-    background: var(--pg-panel-head);
-    border-color: var(--pg-border-soft);
-    cursor: default;
-    opacity: 1;
-  }
-
-  .nl-ports {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 12.5px;
-  }
-
-  .nl-ports th {
-    text-align: left;
-    color: var(--pg-text-muted);
-    font-size: 11.5px;
-    font-weight: 700;
-    padding: 4px 8px;
-    border-bottom: 1px solid var(--pg-border);
-    white-space: nowrap;
-  }
-
-  .nl-ports td {
-    padding: 4px 8px;
-    border-top: 1px solid var(--pg-border-soft);
-    vertical-align: top;
-  }
-
-  .nl-ports .pg-field {
-    height: 26px;
-    width: 100%;
-    padding: 0 8px;
-    font-family: var(--pg-font-mono);
-    font-size: 12px;
-  }
-
-  .nl-ports td:last-child {
-    width: 32px;
-  }
-
-  .nl-req {
-    color: var(--pg-text-muted);
-    white-space: nowrap;
-    line-height: 26px;
-  }
-
-  .nl-portnote {
-    display: block;
-    margin-top: 3px;
-    font-size: 12px;
-    color: var(--pg-text-muted);
-    overflow-wrap: anywhere;
-  }
-
-  .nl-portnote .pg-mono {
-    font-size: 11px;
-  }
-
-  .nl-rm {
-    width: 24px;
-    height: 24px;
-    border: 0;
-    border-radius: 3px;
-    background: transparent;
-    color: var(--pg-text-muted);
-  }
-
-  .nl-rm:disabled {
-    opacity: 0.45;
-    cursor: default;
-  }
-
-  .nl-none {
-    margin: 0;
-  }
-
-  .nl-add {
-    margin-top: 8px;
-  }
-
-  .nl-preview-head {
-    display: flex;
-    align-items: center;
-  }
-
-  .nl-preview-title {
-    margin: 0;
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--pg-text-bright);
-  }
-
-  .nl-preview-head .pg-muted {
-    margin-left: auto;
-  }
-
-  .nl-stage {
-    margin: 12px;
-    min-height: 220px;
-    padding: 24px 16px;
-    border: 1px solid var(--pg-border);
-    border-radius: 4px;
-    background-color: var(--pg-panel-head);
-    background-image: radial-gradient(var(--pg-border) 1px, transparent 1px);
-    background-size: 22px 22px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  /* Same visual language as the graph node card (board .gnode, BaseNode). */
-  .nl-gnode {
-    width: 220px;
-    max-width: 100%;
-    background: var(--pg-panel);
-    border: 1px solid var(--pg-scroll-thumb);
-    border-radius: 4px;
-    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
-  }
-
-  .nl-nh {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    padding: 6px 9px;
-    border-bottom: 1px solid var(--pg-border);
-    font-size: 12.5px;
-    font-weight: 700;
-    color: var(--pg-text-bright);
-    min-width: 0;
-  }
-
-  .nl-nh :global(.pg-g) {
-    margin-top: 0;
-  }
-
-  .nl-nh-label {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .nl-nh-type {
-    margin-left: auto;
-    font-weight: 400;
-    font-size: 11px;
-    color: var(--pg-text-muted);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    min-width: 0;
-    flex: 0 1 auto;
-  }
-
-  .nl-pts {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0 8px;
-    padding: 4px 0;
-  }
-
-  .nl-pcol {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-  }
-
-  .nl-pt {
-    position: relative;
-    padding: 3px 9px;
-    font-size: 11.5px;
-    color: var(--pg-text-soft);
-  }
-
-  .nl-pt span {
-    display: block;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .nl-pt::before {
-    content: '';
-    position: absolute;
-    top: 50%;
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--pg-panel-head);
-    border: 1.5px solid var(--pg-border-strong);
-    transform: translateY(-50%);
-  }
-
-  .nl-pt-in::before {
-    left: -4px;
-  }
-
-  .nl-pt-out {
-    text-align: right;
-  }
-
-  .nl-pt-out::before {
-    right: -4px;
-  }
-
-  .nl-side-sec {
-    padding: 12px 14px;
-  }
-
-  .nl-checks {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: grid;
-    gap: 6px;
-    font-size: 12.5px;
-  }
-
-  .nl-checks li {
-    display: grid;
-    grid-template-columns: 14px 1fr;
-    gap: 10px;
-    align-items: start;
-  }
-
-  .nl-checks li :global(.pg-g) {
-    margin-top: 5px;
-  }
-
-  .nl-try-text {
-    margin: 0 0 8px;
-  }
-</style>
+          <button class="mt-2 rounded border border-neutral-600 px-3 py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-40" disabled={view.busy}>Apply input</button>
+        </form>
+      {/each}
+      <form class="mt-5 flex flex-wrap items-end gap-2" onsubmit={event => { event.preventDefault(); void controller.save(name); }}>
+        <label class="grid flex-1 gap-1 text-neutral-300">Workflow name
+          <input class="rounded border border-neutral-600 bg-neutral-900 p-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400" bind:value={name} required disabled={view.busy} />
+        </label>
+        <button class="rounded border border-cyan-700 px-3 py-2 text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-40" disabled={view.busy}>Save workflow</button>
+      </form>
+    </div>
+  {/if}
+</section>

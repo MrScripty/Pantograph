@@ -434,6 +434,12 @@ jobs:
           python3 -c 'import pathlib, sys; names = [line for line in pathlib.Path(sys.argv[1]).read_text().splitlines() if "tool_loop" in line and line.endswith(": test")]; print("Tool-loop tests discovered:", len(names)); sys.exit(0 if len(names) == 15 else 1)' "$RUNNER_TEMP/tool-loop-tests.list"
           cargo test --locked -p pantograph-workflow-service --lib tool_loop
 
+      - name: Run exact-head custom-node authoring and admission regression suite
+        run: |
+          cargo test --locked -p pantograph-workflow-service --lib workflow::tests::custom_nodes:: -- --list > "$RUNNER_TEMP/custom-node-tests.list"
+          python3 -c 'import pathlib, sys; names = [line for line in pathlib.Path(sys.argv[1]).read_text().splitlines() if line.startswith("workflow::tests::custom_nodes::") and line.endswith(": test")]; print("Custom-node tests discovered:", len(names)); sys.exit(0 if len(names) == 10 else 1)' "$RUNNER_TEMP/custom-node-tests.list"
+          cargo test --locked -p pantograph-workflow-service --lib workflow::tests::custom_nodes::
+
       - name: Run complete session execution regression suite
         run: |
           cargo test -p pantograph-workflow-service --lib workflow::tests::session_execution:: -- --list > "$RUNNER_TEMP/session-execution-tests.list"

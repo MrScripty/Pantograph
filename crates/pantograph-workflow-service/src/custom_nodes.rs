@@ -409,3 +409,5 @@ pub(crate) fn validate_payload(
 
 #[cfg(test)]
 pub(crate) mod tests;
+
+pub mod authoring;
