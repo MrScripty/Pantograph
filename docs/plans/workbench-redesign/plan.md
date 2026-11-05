@@ -207,7 +207,7 @@ One milestone per page, each with the goal "the page matches its board using rea
 
 ## Blockers
 
-- M6 Node Editor: superseded premise (WR-066). PR #95 adds node authoring and rewrites the same three files; M6b must redo the page on top of it once #95 is on this branch.
+- None. M6 Node Editor's superseded premise (WR-066) is resolved by M6b (2026-11-04): PR #95 was merged into this branch and the page was rebuilt over its node authoring controller (report `reports/m6b-node-editor.md`).
 
 ## Re-Plan Triggers
 
