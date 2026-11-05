@@ -37,46 +37,34 @@
   });
 </script>
 
-<div class="space-y-3">
-  <div class="flex items-center justify-between gap-3">
-    <div>
-      <div class="text-[10px] uppercase tracking-wider text-neutral-600">
-        Runtime Manager
-      </div>
-      <p class="mt-1 text-xs text-neutral-500">
+<section class="flex flex-col gap-3" aria-labelledby="managed-runtime-manager-title">
+  <div class="flex flex-wrap items-start justify-between gap-3">
+    <div class="min-w-0 flex-1">
+      <h3 id="managed-runtime-manager-title" class="m-0 text-[13px] font-bold text-pg-text-bright">
+        Runtime manager
+      </h3>
+      <p class="m-0 mt-0.5 pg-muted pg-small">
         Install, select, and inspect redistributable sidecar runtimes without moving version policy out of the backend.
       </p>
     </div>
-    <button
-      type="button"
-      class="rounded border border-neutral-700 px-2 py-1 text-[10px] text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-neutral-200 disabled:border-neutral-800 disabled:text-neutral-600"
-      onclick={loadRuntimes}
-      disabled={isLoading}
-    >
+    <button type="button" class="pg-btn" onclick={loadRuntimes} disabled={isLoading}>
       {isLoading ? 'Refreshing...' : 'Refresh runtimes'}
     </button>
   </div>
 
   {#if error}
-    <div class="rounded border border-red-800/50 bg-red-950/20 p-2 text-xs text-red-300">
-      {error}
-    </div>
+    <p class="m-0 pg-muted pg-small" role="alert">{error}</p>
   {/if}
 
   {#if isLoading && runtimes.length === 0}
-    <div class="flex items-center gap-2 text-xs text-neutral-500">
-      <div class="h-3 w-3 animate-spin rounded-full border border-neutral-500 border-t-transparent"></div>
-      <span>Loading managed runtimes...</span>
-    </div>
+    <p class="m-0 pg-muted pg-small" role="status">Loading managed runtimes...</p>
   {:else if runtimes.length === 0}
-    <div class="rounded border border-neutral-800 bg-neutral-900/40 p-3 text-xs text-neutral-500">
-      No managed runtimes are registered for this build.
-    </div>
+    <p class="m-0 pg-muted pg-small">No managed runtimes are registered for this build.</p>
   {:else}
-    <div class="space-y-3">
+    <div class="flex flex-col gap-3">
       {#each runtimes as runtime (runtime.id)}
         <ManagedRuntimeCard {runtime} />
       {/each}
     </div>
   {/if}
-</div>
+</section>

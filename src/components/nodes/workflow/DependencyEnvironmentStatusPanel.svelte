@@ -28,16 +28,17 @@
 </script>
 
 {#if !hasModelBinding}
-  <div class="text-[10px] text-amber-400">
+  <div class="text-[10px] text-pg-text-soft">
     Connect this sidecar to an inference node.
   </div>
 {:else}
-  <div class="rounded border px-2 py-1 text-[10px] {dependencyBadge.className}">
+  <!-- State is in the badge label; the box stays neutral (token palette, no state hues). -->
+  <div class="rounded border border-pg-border px-2 py-1 text-[10px] text-pg-text-soft">
     <div class="flex items-center gap-2">
       <span>{dependencyBadge.label}</span>
       <button
         type="button"
-        class="ml-auto text-neutral-400 hover:text-neutral-200 disabled:opacity-50"
+        class="ml-auto text-pg-text-muted hover:text-pg-text disabled:opacity-50"
         onclick={onResolve}
         disabled={isBusy}
       >
@@ -45,7 +46,7 @@
       </button>
       <button
         type="button"
-        class="text-neutral-400 hover:text-neutral-200 disabled:opacity-50"
+        class="text-pg-text-muted hover:text-pg-text disabled:opacity-50"
         onclick={onCheck}
         disabled={isBusy}
       >
@@ -53,7 +54,7 @@
       </button>
       <button
         type="button"
-        class="text-neutral-400 hover:text-neutral-200 disabled:opacity-50"
+        class="text-pg-text-muted hover:text-pg-text disabled:opacity-50"
         onclick={onInstall}
         disabled={isBusy}
       >
@@ -61,12 +62,12 @@
       </button>
     </div>
     {#if dependencyStatus?.message}
-      <div class="mt-1 text-[9px] text-neutral-500 truncate" title={dependencyStatus.message}>
+      <div class="mt-1 text-[9px] text-pg-text-muted truncate" title={dependencyStatus.message}>
         {dependencyStatus.message}
       </div>
     {/if}
     {#if dependencyStatus?.code}
-      <div class="mt-1 text-[9px] text-amber-300 truncate" title={dependencyStatus.code}>
+      <div class="mt-1 text-[9px] text-pg-text-soft truncate" title={dependencyStatus.code}>
         code: {dependencyCodeLabel(dependencyStatus.code) ?? dependencyStatus.code}
       </div>
     {/if}

@@ -25,7 +25,7 @@
 
   .svelte-flow__controls {
     background-color: #262626;
-    border: 1px solid #404040;
+    border: 1px solid var(--pg-border, #404040);
     border-radius: 8px;
   }
 
@@ -40,8 +40,8 @@
   }
 
   .svelte-flow__minimap {
-    background-color: #171717;
-    border: 1px solid #404040;
+    background-color: var(--pg-panel-sunken, #171717);
+    border: 1px solid var(--pg-border, #404040);
     border-radius: 8px;
   }
 
@@ -56,8 +56,8 @@
   }
 
   .svelte-flow__handle.connecting {
-    background: #60a5fa !important;
-    box-shadow: 0 0 10px rgba(96, 165, 250, 0.8);
+    background: var(--pg-accent, #60a5fa) !important;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--pg-accent, #60a5fa) 35%, transparent);
   }
 
   .svelte-flow__connection-line {

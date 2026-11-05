@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { Chip } from '../workbench/ui';
+
   type BackendCapabilities = {
     vision: boolean;
     embeddings: boolean;
@@ -17,21 +19,21 @@
 
 <div class="flex flex-wrap gap-1.5">
   {#if capabilities.vision}
-    <span class="rounded bg-green-900/30 px-1.5 py-0.5 text-[10px] text-green-400">Vision</span>
+    <Chip>Vision</Chip>
   {/if}
   {#if capabilities.embeddings}
-    <span class="rounded bg-purple-900/30 px-1.5 py-0.5 text-[10px] text-purple-400">Embeddings</span>
+    <Chip>Embeddings</Chip>
   {/if}
   {#if capabilities.gpu}
-    <span class="rounded bg-amber-900/30 px-1.5 py-0.5 text-[10px] text-amber-400">GPU</span>
+    <Chip>GPU</Chip>
   {/if}
   {#if capabilities.device_selection}
-    <span class="rounded bg-cyan-900/30 px-1.5 py-0.5 text-[10px] text-cyan-400">Device Select</span>
+    <Chip>Device select</Chip>
   {/if}
   {#if capabilities.streaming}
-    <span class="rounded bg-blue-900/30 px-1.5 py-0.5 text-[10px] text-blue-400">Streaming</span>
+    <Chip>Streaming</Chip>
   {/if}
   {#if capabilities.tool_calling}
-    <span class="rounded bg-pink-900/30 px-1.5 py-0.5 text-[10px] text-pink-400">Tools</span>
+    <Chip>Tools</Chip>
   {/if}
 </div>

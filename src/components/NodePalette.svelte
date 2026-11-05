@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { SvelteMap, SvelteSet } from 'svelte/reactivity';
+  import { SvelteSet } from 'svelte/reactivity';
   import {
     dispatchWorkflowPaletteDragEnd,
     dispatchWorkflowPaletteDragStart,
@@ -10,30 +10,17 @@
     setActiveWorkflowPaletteDragDefinition,
     WORKFLOW_PALETTE_DRAG_DATA_TYPES,
   } from './workflowPaletteDrag';
+  import { buildNodePaletteTree } from './workbench/graphInspectionPresenters';
   import type { NodeDefinition } from '../services/workflow/types';
+
+  /** Where a double-clicked (or Enter-activated) node lands on the canvas. */
+  const DOUBLE_CLICK_ADD_POSITION = { x: 200, y: 200 };
 
   let searchQuery = $state('');
   let expandedCategories = new SvelteSet(['input', 'processing', 'output']);
 
-  // Format category names for display (snake_case -> Title Case)
-  function formatCategoryName(category: string): string {
-    return category.charAt(0).toUpperCase() + category.slice(1);
-  }
-
-  let filteredByCategory = $derived(() => {
-    const result = new SvelteMap<string, NodeDefinition[]>();
-    for (const [category, defs] of $nodeDefinitionsByCategory) {
-      const filtered = defs.filter(
-        (d) =>
-          d.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          d.description.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-      if (filtered.length > 0) {
-        result.set(category, filtered);
-      }
-    }
-    return result;
-  });
+  let tree = $derived(buildNodePaletteTree($nodeDefinitionsByCategory, searchQuery, expandedCategories));
+  let searching = $derived(searchQuery.trim().length > 0);
 
   function toggleCategory(category: string) {
     if (expandedCategories.has(category)) {
@@ -62,9 +49,8 @@
     clearActiveWorkflowPaletteDragDefinition();
   }
 
-  function handleDoubleClick(definition: NodeDefinition) {
-    // Add node at center of viewport
-    addNode(definition, { x: 200, y: 200 });
+  function addDefinition(definition: NodeDefinition) {
+    addNode(definition, DOUBLE_CLICK_ADD_POSITION);
   }
 
   function handleNodeKeyDown(event: KeyboardEvent, definition: NodeDefinition) {
@@ -72,87 +58,174 @@
       return;
     }
     event.preventDefault();
-    handleDoubleClick(definition);
+    addDefinition(definition);
   }
-
-  const categoryIcons: Record<string, string> = {
-    input: '[ ]',
-    processing: '[~]',
-    tool: '[#]',
-    output: '[>]',
-    control: '[?]',
-  };
-
-  const categoryColors: Record<string, string> = {
-    input: 'text-blue-400',
-    processing: 'text-green-400',
-    tool: 'text-amber-400',
-    output: 'text-cyan-400',
-    control: 'text-purple-400',
-  };
 </script>
 
-<div class="node-palette w-56 bg-neutral-900 border-r border-neutral-700 flex flex-col overflow-hidden">
-  <div class="p-3 border-b border-neutral-700">
-    <h3 class="text-sm font-medium text-neutral-200 mb-2">Nodes</h3>
+<section class="node-palette pg-panel pg-col" aria-label="Node palette">
+  <div class="np-top">
+    <label class="pg-sr-only" for="graph-node-palette-search">Search nodes</label>
     <input
-      type="text"
-      placeholder="Search nodes..."
+      id="graph-node-palette-search"
+      class="pg-field np-search"
+      type="search"
+      placeholder="Search nodes"
       bind:value={searchQuery}
-      class="w-full px-2 py-1.5 bg-neutral-800 border border-neutral-600 rounded text-sm text-neutral-200 placeholder-neutral-500 focus:outline-none focus:border-blue-500"
     />
   </div>
 
-  <div class="flex-1 overflow-y-auto">
-    {#each [...filteredByCategory()] as [category, definitions] (category)}
-      <div class="category">
-        <button type="button"
-          class="w-full px-3 py-2 bg-neutral-800/50 border-b border-neutral-700 flex items-center gap-2 text-left hover:bg-neutral-800 transition-colors"
-          onclick={() => toggleCategory(category)}
-        >
-          <span class="font-mono text-xs {categoryColors[category] || 'text-neutral-400'}">
-            {categoryIcons[category] || '[*]'}
-          </span>
-          <span class="flex-1 text-sm text-neutral-200">{formatCategoryName(category)}</span>
-          <span class="text-xs text-neutral-500">{definitions.length}</span>
-          <span class="text-xs text-neutral-500">
-            {expandedCategories.has(category) ? '[-]' : '[+]'}
-          </span>
-        </button>
+  <div class="pg-scroll np-tree">
+    {#each tree as category (category.key)}
+      <button
+        type="button"
+        class="np-cat"
+        aria-expanded={category.expanded}
+        aria-controls={`graph-node-palette-${category.key}`}
+        disabled={searching}
+        title={searching ? 'Clear the search to fold categories' : undefined}
+        onclick={() => toggleCategory(category.key)}
+      >
+        <span class="np-chev" aria-hidden="true">{category.expanded ? '▾' : '▸'}</span>
+        {category.label}
+        <span class="np-count">{category.count}</span>
+      </button>
 
-        {#if expandedCategories.has(category)}
-          <div class="py-1">
-            {#each definitions as definition (definition.node_type)}
-              <div
-                class="node-item px-4 py-2 cursor-grab flex justify-between items-center text-sm text-neutral-300 hover:bg-neutral-800 transition-colors"
-                draggable="true"
-                ondragstart={(e) => handleDragStart(e, definition)}
-                ondragend={handleDragEnd}
-                ondblclick={() => handleDoubleClick(definition)}
-                onkeydown={(event) => handleNodeKeyDown(event, definition)}
-                title={definition.description}
-                role="button"
-                tabindex="0"
-              >
-                <span>{definition.label}</span>
-                <span class="text-xs text-neutral-600">
-                  {definition.inputs.length}:{definition.outputs.length}
-                </span>
-              </div>
-            {/each}
-          </div>
-        {/if}
-      </div>
+      {#if category.expanded}
+        <div id={`graph-node-palette-${category.key}`}>
+          {#each category.items as item (item.definition.node_type)}
+            <!-- A div with role="button" (not a <button>) keeps HTML5 drag-and-drop working in every supported webview. -->
+            <div
+              class="np-item"
+              draggable="true"
+              ondragstart={(event) => handleDragStart(event, item.definition)}
+              ondragend={handleDragEnd}
+              ondblclick={() => addDefinition(item.definition)}
+              onkeydown={(event) => handleNodeKeyDown(event, item.definition)}
+              title={item.definition.description}
+              role="button"
+              tabindex="0"
+              aria-label={`${item.label}, ${item.portsTitle}. Press Enter to add to the canvas.`}
+            >
+              <span class="np-name">{item.label}</span>
+              <span class="np-ports" title={item.portsTitle}>{item.ports}</span>
+            </div>
+          {/each}
+        </div>
+      {/if}
+    {:else}
+      <p class="np-empty">
+        {searching ? 'No nodes match this search.' : 'Node definitions are not loaded yet.'}
+      </p>
     {/each}
   </div>
 
-  <div class="p-2 border-t border-neutral-700 text-xs text-neutral-500">
-    Drag or double-click to add
-  </div>
-</div>
+  <div class="np-foot">Drag onto the canvas, or double-click to add.</div>
+</section>
 
 <style>
-  .node-item:active {
+  .node-palette {
+    flex: 0 0 232px;
+    min-height: 0;
+  }
+
+  .np-top {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--pg-border);
+    flex: none;
+  }
+
+  .np-search {
+    width: 100%;
+    height: 28px;
+  }
+
+  .np-tree {
+    padding: 4px 0;
+  }
+
+  .np-cat {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 5px 12px;
+    border: 0;
+    background: transparent;
+    color: var(--pg-text-soft);
+    text-align: left;
+    cursor: pointer;
+    font-size: 12.5px;
+    font-weight: 700;
+  }
+
+  .np-cat:hover {
+    background: var(--pg-panel-raised);
+  }
+
+  .np-cat:disabled {
+    cursor: default;
+  }
+
+  .np-cat:disabled:hover {
+    background: transparent;
+  }
+
+  .np-chev {
+    font-size: 10px;
+    color: var(--pg-border-strong);
+  }
+
+  .np-count,
+  .np-ports {
+    margin-left: auto;
+    font-family: var(--pg-font-mono);
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--pg-border-strong);
+  }
+
+  .np-item {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0 8px;
+    align-items: center;
+    padding: 5px 12px 5px 30px;
+    font-size: 12.5px;
+    color: var(--pg-text);
+    cursor: grab;
+  }
+
+  .np-item:hover {
+    background: var(--pg-panel-raised);
+  }
+
+  .np-item:active {
     cursor: grabbing;
+  }
+
+  .np-name {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .np-empty {
+    margin: 0;
+    padding: 16px 12px;
+    font-size: 12.5px;
+    color: var(--pg-text-muted);
+  }
+
+  .np-foot {
+    padding: 6px 12px;
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+    border-top: 1px solid var(--pg-border);
+    background: var(--pg-panel-head);
+    font-size: 12.5px;
+    color: var(--pg-text-muted);
+    flex: none;
   }
 </style>

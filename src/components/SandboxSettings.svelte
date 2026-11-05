@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { expandedSection, toggleSection } from '../stores/accordionStore';
+  import { StatusGlyph } from './workbench/ui';
 
   // Types matching the Rust backend
   type ImportValidationMode = 'none' | 'import_resolve' | 'vite_integration' | 'esbuild_bundle';
@@ -104,71 +105,52 @@
   );
 </script>
 
-<div class="space-y-3">
-  <!-- Header with toggle -->
-  <button type="button"
-    class="w-full flex items-center justify-between text-xs uppercase tracking-wider text-neutral-500 hover:text-neutral-400 transition-colors"
-    onclick={() => toggleSection('sandbox')}
-  >
-    <div class="flex items-center gap-2">
-      <span>Sandbox Settings</span>
-      {#if isLoading}
-        <span class="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse"></span>
-      {:else if loadError}
-        <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>
-      {:else}
-        <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-      {/if}
-    </div>
-    <svg
-      class="w-3 h-3 transform transition-transform {$expandedSection === 'sandbox' ? 'rotate-180' : ''}"
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-    >
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-    </svg>
-  </button>
+<section class="pg-card" aria-labelledby="settings-sandbox-title">
+  <div class="flex items-center gap-2">
+    <h3 class="m-0 min-w-0 flex-1">
+      <button
+        type="button"
+        id="settings-sandbox-title"
+        class="flex w-full items-center gap-2 text-left text-[13px] font-bold text-pg-text-bright"
+        aria-expanded={$expandedSection === 'sandbox'}
+        onclick={() => toggleSection('sandbox')}
+      >
+        Sandbox settings
+        <span class="pg-muted text-[11px] font-normal" aria-hidden="true">
+          {$expandedSection === 'sandbox' ? '▴' : '▾'}
+        </span>
+      </button>
+    </h3>
+    <span class="flex items-center gap-1.5 pg-small text-pg-text-soft">
+      <StatusGlyph state={isLoading ? 'running' : loadError ? 'failed' : 'succeeded'} small />
+      {isLoading ? 'Loading' : loadError ? 'Unavailable' : 'Loaded'}
+    </span>
+  </div>
 
   {#if $expandedSection === 'sandbox'}
-    <div class="space-y-4 p-3 bg-neutral-800/30 rounded-lg">
+    <div class="mt-3 flex flex-col gap-4 border-t border-pg-border-soft pt-3">
       {#if loadError}
-        <div class="text-[10px] text-red-400">
-          Failed to load config: {loadError}
-        </div>
+        <p class="m-0 pg-muted pg-small" role="alert">Failed to load config: {loadError}</p>
       {/if}
 
-      <!-- Import Validation Mode -->
-      <div class="space-y-2">
-        <label for="validation-mode-select" class="text-xs text-neutral-400">Import Validation Mode</label>
+      <div class="flex flex-col gap-1">
+        <label for="validation-mode-select" class="pg-fl">Import validation mode</label>
         <select
           id="validation-mode-select"
           bind:value={validationMode}
           disabled={isLoading}
-          class="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-neutral-500 disabled:opacity-50"
-          style="color-scheme: dark;"
+          class="pg-field w-full"
         >
-          <option value="none" class="bg-neutral-900 text-neutral-200">
-            None (Fastest)
-          </option>
-          <option value="import_resolve" class="bg-neutral-900 text-neutral-200">
-            Import Resolution (Recommended)
-          </option>
-          <option value="vite_integration" class="bg-neutral-900 text-neutral-200">
-            Vite Integration (Most Accurate)
-          </option>
-          <option value="esbuild_bundle" class="bg-neutral-900 text-neutral-200">
-            esbuild Bundle (Thorough)
-          </option>
+          <option value="none">None (Fastest)</option>
+          <option value="import_resolve">Import Resolution (Recommended)</option>
+          <option value="vite_integration">Vite Integration (Most Accurate)</option>
+          <option value="esbuild_bundle">esbuild Bundle (Thorough)</option>
         </select>
-        <div class="text-[10px] text-neutral-600">
-          {getModeDescription(validationMode)}
-        </div>
+        <p class="m-0 pg-muted pg-small">{getModeDescription(validationMode)}</p>
       </div>
 
-      <!-- Validation Timeout -->
-      <div class="space-y-1">
-        <label for="validation-timeout-range" class="text-xs text-neutral-400">Validation Timeout (ms)</label>
+      <div class="flex flex-col gap-1">
+        <label for="validation-timeout-range" class="pg-fl">Validation timeout (ms)</label>
         <div class="flex items-center gap-3">
           <input
             id="validation-timeout-range"
@@ -178,18 +160,15 @@
             max="30000"
             step="1000"
             disabled={validationMode === 'none'}
-            class="flex-1 h-1.5 bg-neutral-700 rounded-lg appearance-none cursor-pointer disabled:opacity-50"
+            class="min-w-0 flex-1 cursor-pointer accent-pg-text disabled:cursor-default disabled:opacity-50"
           />
-          <span class="text-xs text-neutral-300 w-16 text-right">{timeoutMs}ms</span>
+          <span class="pg-mono w-20 text-right">{timeoutMs}ms</span>
         </div>
-        <div class="text-[10px] text-neutral-600">
-          Maximum time to wait for validation script.
-        </div>
+        <p class="m-0 pg-muted pg-small">Maximum time to wait for validation script.</p>
       </div>
 
-      <!-- Additional Allowed Packages -->
-      <div class="space-y-1">
-        <label for="allowed-packages-textarea" class="text-xs text-neutral-400">Additional Allowed Packages</label>
+      <div class="flex flex-col gap-1">
+        <label for="allowed-packages-textarea" class="pg-fl">Additional allowed packages</label>
         <textarea
           id="allowed-packages-textarea"
           bind:value={allowedPackages}
@@ -197,39 +176,29 @@
           placeholder="package-name
 @scope/package"
           rows="3"
-          class="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-neutral-500 disabled:opacity-50 font-mono"
-          style="color-scheme: dark; resize: none;"
+          class="pg-field pg-mono h-auto resize-none py-1.5"
         ></textarea>
-        <div class="text-[10px] text-neutral-600">
+        <p class="m-0 pg-muted pg-small">
           One package per line. Added to package.json dependencies for validation.
-        </div>
+        </p>
       </div>
 
-      <!-- Save Button -->
       {#if hasChanges}
-        <button type="button"
-          onclick={saveConfig}
-          disabled={isSaving}
-          class="w-full py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-700 disabled:text-neutral-500 rounded text-xs transition-colors"
-        >
-          {isSaving ? 'Saving...' : 'Save Sandbox Settings'}
-        </button>
+        <div>
+          <button type="button" onclick={saveConfig} disabled={isSaving} class="pg-btn pg-btn-primary">
+            {isSaving ? 'Saving...' : 'Save sandbox settings'}
+          </button>
+        </div>
       {/if}
 
-      <!-- Help text -->
-      <div class="text-[10px] text-neutral-600 leading-relaxed">
-        Import validation catches errors before they reach the main app.
-        Settings apply to the next generated component.
-      </div>
+      <p class="m-0 pg-muted pg-small">
+        Import validation catches errors before they reach the main app. Settings apply to the next
+        generated component.
+      </p>
     </div>
   {:else}
-    <!-- Collapsed summary -->
-    <div class="text-xs text-neutral-500">
-      <span class="text-neutral-400">{getModeLabel(validationMode)}</span>
-      {#if validationMode !== 'none'}
-        <span class="mx-1">|</span>
-        <span class="text-neutral-400">{timeoutMs}ms timeout</span>
-      {/if}
-    </div>
+    <p class="m-0 mt-1 pg-muted pg-small">
+      {getModeLabel(validationMode)}{#if validationMode !== 'none'}, {timeoutMs}ms timeout{/if}
+    </p>
   {/if}
-</div>
+</section>

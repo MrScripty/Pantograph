@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { StatusGlyph } from '../workbench/ui';
+
   type BackendCapabilities = {
     vision: boolean;
     embeddings: boolean;
@@ -38,30 +40,25 @@
 <div class="flex flex-wrap gap-2">
   {#each backends as backend (backend.name)}
     {@const summary = summaryForBackend(backend)}
+    {@const current = backend.backend_key === currentBackendKey && serverRunning}
     <div class="flex max-w-[190px] flex-col">
       <button
         type="button"
-        class={`flex items-center gap-1.5 rounded px-3 py-1.5 text-xs transition-colors ${
-          backend.backend_key === currentBackendKey && serverRunning
-            ? 'bg-blue-600 text-white'
-            : backend.available
-              ? 'bg-neutral-700 text-neutral-300 hover:bg-neutral-600'
-              : 'bg-neutral-800 text-neutral-500'
-        }`}
+        class="pg-tgl"
+        aria-pressed={current}
         onclick={() => onSelectBackend(backend)}
         disabled={!backend.available || isSwitching}
         title={backend.description}
       >
-        {#if isSwitching && backend.backend_key === currentBackendKey}
-          <span class="inline-block h-3 w-3 animate-spin rounded-full border border-white border-t-transparent"></span>
-        {/if}
         {backend.name}
+        {#if isSwitching && backend.backend_key === currentBackendKey}
+          <span class="pg-small">switching</span>
+        {/if}
       </button>
 
       {#if summary}
-        <span class={`mt-1 text-[10px] leading-tight ${
-          backend.available ? 'text-neutral-500' : 'text-amber-400'
-        }`}>
+        <span class="mt-1 flex items-start gap-1.5 text-[11.5px] leading-tight text-pg-text-muted">
+          {#if !backend.available}<StatusGlyph state="warn" small class="mt-0.5" />{/if}
           {summary}
         </span>
       {/if}

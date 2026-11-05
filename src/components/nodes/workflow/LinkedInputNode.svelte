@@ -1,5 +1,6 @@
 <script lang="ts">
   import BaseNode from '../BaseNode.svelte';
+  import NodeHeaderTitle from './NodeHeaderTitle.svelte';
   import type { NodeDefinition } from '../../../services/workflow/types';
   import { updateNodeData } from '../../../stores/workflowStore';
   import {
@@ -22,8 +23,6 @@
 
   let { id, data, selected = false }: Props = $props();
 
-  // Node color (cyan for linked inputs)
-  const nodeColor = '#06b6d4';
 
   // Get the link mapping for this node
   let mapping = $derived($linkMappings.get(id));
@@ -64,32 +63,17 @@
   }
 </script>
 
-<div class="linked-input-node-wrapper" style="--node-color: {nodeColor}">
+<div class="linked-input-node-wrapper">
   <BaseNode {id} {data} {selected}>
     {#snippet header()}
-      <div class="flex items-center gap-2">
-        <div
-          class="w-5 h-5 rounded flex items-center justify-center flex-shrink-0"
-          style="background-color: {nodeColor}"
-        >
-          <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
-            />
-          </svg>
-        </div>
-        <span class="text-sm font-medium text-neutral-200">{data.label || 'Linked Input'}</span>
-      </div>
+      <NodeHeaderTitle label={data.label || 'Linked Input'} />
     {/snippet}
 
       <div class="linked-input-content">
         {#if status === 'unlinked'}
           <!-- Unlinked state -->
           <button type="button"
-            class="link-button w-full px-3 py-2 bg-neutral-700 hover:bg-neutral-600 rounded text-sm text-neutral-300 flex items-center justify-center gap-2 transition-colors"
+            class="link-button w-full px-3 py-2 border border-pg-border bg-pg-panel-raised hover:bg-pg-panel-selected rounded text-sm text-pg-text-soft flex items-center justify-center gap-2 transition-colors"
             onclick={handleLink}
             disabled={$linkModeActive}
           >
@@ -106,24 +90,24 @@
         {:else if status === 'linked'}
           <!-- Linked state -->
           <div class="linked-state">
-            <div class="flex items-center gap-1.5 text-green-400 text-xs mb-1">
+            <div class="flex items-center gap-1.5 text-pg-ok text-xs mb-1">
               <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
               </svg>
               <span>Linked to: {elementLabel}</span>
             </div>
-            <div class="value-preview text-xs text-neutral-400 bg-neutral-900 rounded px-2 py-1 mb-2 font-mono">
+            <div class="value-preview text-xs text-pg-text-muted bg-pg-panel-sunken rounded px-2 py-1 mb-2 font-mono">
               {truncateValue(linkedValue) || '(empty)'}
             </div>
             <div class="flex gap-1">
               <button type="button"
-                class="flex-1 px-2 py-1 bg-neutral-700 hover:bg-neutral-600 rounded text-xs text-neutral-300 transition-colors"
+                class="flex-1 px-2 py-1 border border-pg-border bg-pg-panel-raised hover:bg-pg-panel-selected rounded text-xs text-pg-text-soft transition-colors"
                 onclick={handleUnlink}
               >
                 Unlink
               </button>
               <button type="button"
-                class="flex-1 px-2 py-1 bg-neutral-700 hover:bg-neutral-600 rounded text-xs text-neutral-300 transition-colors"
+                class="flex-1 px-2 py-1 border border-pg-border bg-pg-panel-raised hover:bg-pg-panel-selected rounded text-xs text-pg-text-soft transition-colors"
                 onclick={handleRelink}
                 disabled={$linkModeActive}
               >
@@ -134,7 +118,7 @@
         {:else if status === 'error'}
           <!-- Error state -->
           <div class="error-state">
-            <div class="flex items-center gap-1.5 text-amber-400 text-xs mb-1">
+            <div class="flex items-center gap-1.5 text-pg-text-soft text-xs mb-1">
               <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   stroke-linecap="round"
@@ -145,19 +129,19 @@
               </svg>
               <span>{errorMessage}</span>
             </div>
-            <div class="text-xs text-neutral-500 mb-2">
+            <div class="text-xs text-pg-text-muted mb-2">
               Previously: {elementLabel}
             </div>
             <div class="flex gap-1">
               <button type="button"
-                class="flex-1 px-2 py-1 bg-neutral-700 hover:bg-neutral-600 rounded text-xs text-neutral-300 transition-colors"
+                class="flex-1 px-2 py-1 border border-pg-border bg-pg-panel-raised hover:bg-pg-panel-selected rounded text-xs text-pg-text-soft transition-colors"
                 onclick={handleRelink}
                 disabled={$linkModeActive}
               >
                 Re-link
               </button>
               <button type="button"
-                class="flex-1 px-2 py-1 bg-neutral-700 hover:bg-red-900/50 rounded text-xs text-neutral-300 transition-colors"
+                class="flex-1 px-2 py-1 border border-pg-border bg-pg-panel-raised hover:bg-pg-panel-selected rounded text-xs text-pg-text-soft transition-colors"
                 onclick={handleClear}
               >
                 Clear
@@ -170,15 +154,6 @@
 </div>
 
 <style>
-  .linked-input-node-wrapper :global(.base-node) {
-    border-color: color-mix(in srgb, var(--node-color) 50%, transparent);
-  }
-
-  .linked-input-node-wrapper :global(.node-header) {
-    background-color: color-mix(in srgb, var(--node-color) 20%, transparent);
-    border-color: color-mix(in srgb, var(--node-color) 30%, transparent);
-  }
-
   .link-button:disabled {
     opacity: 0.5;
     cursor: not-allowed;

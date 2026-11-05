@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Node Editor tab</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&amp;family=Atkinson+Hyperlegible:wght@400;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<link rel="stylesheet" href="./shell.css">
+<style>
+.ports{width:100%;border-collapse:collapse;font-size:12.5px}
+.ports th{text-align:left;color:#A3A9B4;font-size:11.5px;font-weight:700;padding:4px 8px;border-bottom:1px solid #4A5059}
+.ports td{padding:4px 8px;border-top:1px solid #3B4048}
+.ports .field{height:26px;width:100%;padding:0 8px;font-family:'JetBrains Mono',monospace;font-size:12px}
+.ports .rm{width:24px;height:24px;border:0;border-radius:3px;background:transparent;color:#A3A9B4;cursor:pointer}
+.ports .rm:hover{background:#4A5059;color:#fff}
+.form label{display:block;font-size:12px;color:#A3A9B4}
+.form .field{display:block;width:100%;height:28px;margin-top:3px}
+.form textarea.field{height:auto;padding:6px 10px;resize:vertical;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.5}
+.stage{position:relative;flex:1;min-height:0;border:1px solid #4A5059;border-radius:4px;background-color:#2E333A;background-image:radial-gradient(#4A5059 1px,transparent 1px);background-size:22px 22px;display:flex;align-items:center;justify-content:center}
+.gnode.preview{position:static;width:200px}
+.check{display:grid;grid-template-columns:14px 1fr;gap:6px 10px;font-size:12.5px;align-items:start}
+.check .g{margin-top:5px;width:8px;height:8px}
+</style>
+</helmet>
+<div class="root" style="--accent: {{accent}}">
+  <header class="hdr">
+    <div class="brand">Pantograph</div>
+    <nav aria-label="Workspaces" style="display:flex;align-items:center">
+      <a class="tab" href="#sessions">Sessions</a>
+      <span class="vdiv" aria-hidden="true"></span>
+      <a class="tab" href="#scheduler">Scheduler</a>
+      <a class="tab" href="#diagnostics">Diagnostics</a>
+      <a class="tab" href="#io">I/O Inspector</a>
+      <a class="tab" href="#network">Network</a>
+      <span class="vdiv" aria-hidden="true"></span>
+      <a class="tab" href="#graph">Graph</a>
+      <a class="tab" href="#nodes" aria-current="page">Node Editor</a>
+      <a class="tab" href="#library">Library</a>
+    </nav>
+    <div style="flex:1"></div>
+    <!--ctx-start-->
+    <div class="ctxwrap" onMouseEnter="{{ctxHoverOn}}" onMouseLeave="{{ctxHoverOff}}">
+      <sc-if value="{{ctxHas}}" hint-placeholder-val="{{ true }}">
+        <div class="ctx" aria-label="Run context">
+          <button class="ctxbtn" type="button" aria-haspopup="listbox" aria-expanded="{{pickerOpen}}" onClick="{{togglePicker}}" title="{{ctxRun.id}}, click to change run">
+            <span class="g {{ctxRun.glyph}}" aria-hidden="true" style="margin-top:0"></span>
+            <span class="ctxname">{{ctxRun.wf}} <span class="muted">v{{ctxRun.ver}}</span></span>
+            <span class="muted" aria-hidden="true" style="font-size:10px">▾</span>
+          </button>
+          <button class="x" type="button" aria-label="Clear run context" onClick="{{clearSel}}">×</button>
+        </div>
+      </sc-if>
+      <sc-if value="{{ctxNone}}" hint-placeholder-val="{{ false }}">
+        <button class="ctx ctxbtn ctxempty" type="button" aria-haspopup="listbox" aria-expanded="{{pickerOpen}}" onClick="{{togglePicker}}">Pick a run <span aria-hidden="true" style="font-size:10px">▾</span></button>
+      </sc-if>
+      <sc-if value="{{pickerOpen}}" hint-placeholder-val="{{ false }}">
+        <div class="pop" role="dialog" aria-label="Pick a run">
+          <div style="padding:10px 10px 6px">
+            <label for="ctx-q" style="position:absolute;left:-9999px">Search runs or paste a run id</label>
+            <input id="ctx-q" class="field" data-key="ctx-q" data-autofocus="1" type="search" placeholder="Search runs, or paste a run id" value="{{pickerQuery}}" onInput="{{setQuery}}" style="width:100%">
+          </div>
+          <div class="poplist">
+            <sc-for list="{{pickerGroups}}" as="pg" hint-placeholder-count="2">
+              <div class="pophead">{{pg.title}} <span class="n">{{pg.n}}</span></div>
+              <sc-for list="{{pg.runs}}" as="r" hint-placeholder-count="2">
+                <button class="poprow" type="button" aria-current="{{r.selected}}" onClick="{{r.pick}}" onMouseEnter="{{r.hoverOn}}" onMouseLeave="{{r.hoverOff}}">
+                  <span class="g {{r.glyph}}" aria-hidden="true"></span>
+                  <span style="min-width:0"><b>{{r.wf}}</b> <span class="ver">v{{r.ver}}</span><span class="sub">{{r.statusLabel}}{{r.contextSuffix}}</span></span>
+                  <span class="time">{{r.id}}</span>
+                </button>
+              </sc-for>
+            </sc-for>
+            <sc-if value="{{pickerEmpty}}" hint-placeholder-val="{{ false }}"><div class="muted small" style="padding:10px 12px">{{pickerEmptyText}}</div></sc-if>
+          </div>
+          <div class="popfoot">Hover a run in Scheduler and press Ctrl+C to copy its id. Hover this chip and press Ctrl+V to view a copied run.</div>
+        </div>
+      </sc-if>
+    </div>
+    <sc-if value="{{copied}}" hint-placeholder-val="{{ false }}"><div class="toast" role="status">Copied {{copiedId}}</div></sc-if>
+    <!--ctx-end-->
+    <div class="engine muted"><span class="eng" aria-hidden="true"></span>Local engine</div>
+    <a class="tab" href="#settings">Settings</a>
+    <button class="tgl" type="button" aria-pressed="false" style="margin-left:6px"><svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true" style="stroke:currentColor;fill:none;stroke-width:1.8"><path d="M4 5h16v11H9l-5 4z"/></svg>Assistant</button>
+  </header>
+
+  <main class="main">
+    <div class="dimrow"><div class="dim" role="presentation"><span class="dim-label">{{dimLine}}</span></div></div>
+
+    <sc-if value="{{unavailable}}" hint-placeholder-val="{{ false }}">
+      <div class="small" style="flex:none;padding:8px 12px;border:1px solid #4A5059;border-radius:4px;background:#2E333A;display:flex;gap:10px;align-items:center"><span class="g g-queued" aria-hidden="true" style="margin-top:0"></span>Node authoring is not available in this build. You can read your node definitions, but Save and Publish are off until the authoring API and the local agent are enabled in <a href="#settings">Settings</a>.</div>
+    </sc-if>
+
+    <div style="flex:1;min-height:0;display:flex;gap:14px;align-items:stretch">
+
+      <section class="panel col" aria-label="Node definitions" style="flex:0 0 300px">
+        <div class="ptop">
+          <div style="display:flex;gap:8px">
+            <label for="ne-search" style="position:absolute;left:-9999px">Search node definitions</label>
+            <input id="ne-search" class="field" type="search" placeholder="Search your nodes" style="flex:1;min-width:0">
+            <button class="btn" type="button" aria-disabled="{{unavailable}}">New node</button>
+          </div>
+        </div>
+        <div class="scroll">
+          <sc-for list="{{groups}}" as="grp" hint-placeholder-count="2">
+            <div class="ghead" style="cursor:default">{{grp.title}} <span class="n">{{grp.n}}</span></div>
+            <sc-for list="{{grp.items}}" as="d" hint-placeholder-count="3">
+              <button class="item" type="button" aria-current="{{d.selected}}" onClick="{{d.pick}}">
+                <span class="g {{d.glyph}}" aria-hidden="true"></span>
+                <span style="min-width:0"><span class="name">{{d.label}}</span><span class="ver">{{d.type}}</span><span class="sub">{{d.sub}}</span></span>
+                <span class="time">{{d.when}}</span>
+              </button>
+            </sc-for>
+          </sc-for>
+        </div>
+        <div class="pfoot small muted">Built-in nodes are read-only. Duplicate one to start from it.</div>
+      </section>
+
+      <section class="panel col form" aria-label="Definition" style="flex:1 1 440px">
+        <div class="scroll">
+          <div style="padding:16px 18px 12px;display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">
+            <div style="flex:1 1 220px;min-width:0">
+              <div class="title">{{sel.label}}</div>
+              <div class="mono muted" style="margin-top:2px">{{sel.type}} <span class="muted">v{{sel.ver}}</span></div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn" type="button" aria-disabled="{{sel.readonly}}" onClick="{{save}}">{{saveLabel}}</button>
+              <button class="btn primary" type="button" aria-disabled="{{cannotPublish}}" title="{{publishTitle}}">Publish to runtime</button>
+            </div>
+          </div>
+          <div class="sec" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));gap:10px 14px">
+            <label>Label<input class="field" value="{{sel.label}}" onChange="{{dirtyIt}}"></label>
+            <label>Category<select class="field" onChange="{{dirtyIt}}"><option>processing</option><option>input</option><option>tool</option><option>output</option><option>control</option></select></label>
+            <label>Runtime<select class="field" onChange="{{dirtyIt}}"><option>{{sel.runtime}}</option><option>llama.cpp</option><option>diffusers</option><option>python worker</option><option>none (pure)</option></select></label>
+            <label>Device<select class="field" onChange="{{dirtyIt}}"><option>auto</option><option>cuda</option><option>cpu</option></select></label>
+            <label style="grid-column:1/-1">Description<textarea class="field" rows="2" onChange="{{dirtyIt}}">{{sel.desc}}</textarea></label>
+          </div>
+          <div class="sec">
+            <h3>Inputs</h3>
+            <table class="ports"><thead><tr><th>Name</th><th>Type</th><th>Default</th><th></th></tr></thead><tbody>
+              <sc-for list="{{sel.ins}}" as="p" hint-placeholder-count="3">
+                <tr><td><input class="field" value="{{p.name}}" aria-label="Input name"></td><td><input class="field" value="{{p.type}}" aria-label="Input type"></td><td><input class="field" value="{{p.def}}" aria-label="Default"></td><td><button class="rm" type="button" aria-label="Remove input">×</button></td></tr>
+              </sc-for>
+            </tbody></table>
+            <button class="tgl" type="button" style="margin-top:8px" aria-disabled="{{sel.readonly}}">Add input</button>
+          </div>
+          <div class="sec">
+            <h3>Outputs</h3>
+            <table class="ports"><thead><tr><th>Name</th><th>Type</th><th>Retained</th><th></th></tr></thead><tbody>
+              <sc-for list="{{sel.outs}}" as="p" hint-placeholder-count="2">
+                <tr><td><input class="field" value="{{p.name}}" aria-label="Output name"></td><td><input class="field" value="{{p.type}}" aria-label="Output type"></td><td><select class="field" aria-label="Retention"><option>{{p.ret}}</option><option>payload</option><option>metadata only</option><option>not retained</option></select></td><td><button class="rm" type="button" aria-label="Remove output">×</button></td></tr>
+              </sc-for>
+            </tbody></table>
+            <button class="tgl" type="button" style="margin-top:8px" aria-disabled="{{sel.readonly}}">Add output</button>
+          </div>
+          <div class="sec">
+            <h3>Implementation</h3>
+            <div class="code" style="max-height:200px">{{sel.code}}</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel col" aria-label="Preview and checks" style="flex:0 0 320px">
+        <div class="ptop" style="flex-direction:row;align-items:center"><span style="font-size:13px;font-weight:700;color:#fff">On the canvas</span><span class="muted small" style="margin-left:auto">live preview</span></div>
+        <div class="stage" style="flex:0 0 220px;margin:12px">
+          <div class="gnode preview">
+            <div class="nh"><span class="g g-queued" aria-hidden="true"></span>{{sel.label}}<span class="mono">{{sel.type}}</span></div>
+            <sc-for list="{{sel.ins}}" as="p" hint-placeholder-count="3"><div class="pt in">{{p.name}}</div></sc-for>
+            <sc-for list="{{sel.outs}}" as="p" hint-placeholder-count="2"><div class="pt out">{{p.name}}</div></sc-for>
+          </div>
+        </div>
+        <div class="sec" style="padding:12px 14px">
+          <h3>Checks</h3>
+          <div class="check">
+            <sc-for list="{{checks}}" as="c" hint-placeholder-count="4"><span class="g {{c.glyph}}" aria-hidden="true"></span><span>{{c.text}}</span></sc-for>
+          </div>
+        </div>
+        <div class="sec" style="padding:12px 14px">
+          <h3>Try it</h3>
+          <div class="small muted">Runs the node once with sample inputs on the local engine, outside any workflow.</div>
+          <div style="margin-top:8px;display:flex;gap:8px;align-items:center"><button class="btn sm" type="button" onClick="{{tryIt}}" aria-disabled="{{unavailable}}">{{tryLabel}}</button><span class="small muted">{{tryNote}}</span></div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#D9B06A","options":["#D9B06A","#9FB7D9","#A7C4A0"]},"unavailable":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  /*ctx-start*/
+  catalog() {
+    return [
+      { id: 'run_01JB2K7Q3M', wf: 'ingest-docs-rag', ver: '1.4.0', status: 'running', runtime: 'llama.cpp', device: 'cuda:0', deviceName: 'RTX 4090', vram: 17.2, queue: 0, prio: 0, est: 'About 2 min left', node: 'embed_chunks', pct: '61%', reason: '', started: '20:01:40', dur: '4m 12s', updated: '20:05:51', client: 'gui', session: 's-4f2a' },
+      { id: 'run_01JB2K9F0A', wf: 'image-gen-sdxl', ver: '0.9.2', status: 'running', runtime: 'diffusers', device: 'cuda:1', deviceName: 'RTX 3090', vram: 9.8, queue: 0, prio: 0, est: 'About 40 s left', node: 'sample', pct: 'step 18 of 30', reason: '', started: '20:04:02', dur: '1m 49s', updated: '20:05:50', client: 'gui', session: 's-4f2a' },
+      { id: 'run_01JB2KB4ZT', wf: 'transcribe-meeting', ver: '2.1.0', status: 'waiting', runtime: 'whisper', device: 'cuda:0', deviceName: 'RTX 4090', vram: 8, queue: 1, prio: 5, est: 'Starts after ingest-docs-rag', node: '', pct: '', reason: 'needs 8 GB on cuda:0, 6.8 GB free', started: '—', dur: '—', updated: '20:05:12', client: 'cli', session: 's-9c01' },
+      { id: 'run_01JB2KC1PX', wf: 'summarize-daily', ver: '1.0.3', status: 'queued', runtime: 'llama.cpp', device: 'cuda:1', deviceName: 'RTX 3090', vram: 6, queue: 2, prio: 0, est: 'About 6 min', node: '', pct: '', reason: 'next on cuda:1, model cached', started: '—', dur: '—', updated: '20:04:40', client: 'gui', session: 's-4f2a' },
+      { id: 'run_01JB2KD8RN', wf: 'embed-corpus', ver: '1.4.0', status: 'queued', runtime: 'llama.cpp', device: '', deviceName: '', vram: 7, queue: 3, prio: 0, est: 'About 9 min', node: '', pct: '', reason: 'cold load, 12 s', started: '—', dur: '—', updated: '20:04:41', client: 'gui', session: 's-4f2a' },
+      { id: 'run_01JB2KE2QW', wf: 'image-gen-sdxl', ver: '0.9.2', status: 'queued', runtime: 'diffusers', device: '', deviceName: '', vram: 9.8, queue: 4, prio: 0, est: 'About 2 min', node: '', pct: '', reason: 'model cached', started: '—', dur: '—', updated: '20:04:55', client: 'gui', session: 's-4f2a' },
+      { id: 'run_01JB2JZ0MT', wf: 'summarize-daily', ver: '1.0.3', status: 'succeeded', runtime: 'llama.cpp', device: 'cuda:0', deviceName: 'RTX 4090', vram: 6, queue: 0, prio: 0, est: 'Finished in 38 s', node: '', pct: '', reason: '', started: '19:52:10', dur: '38 s', updated: '19:52:48', client: 'gui', session: 's-4f2a' },
+      { id: 'run_01JB2JV7KD', wf: 'embed-corpus', ver: '1.3.9', status: 'succeeded', runtime: 'llama.cpp', device: 'cuda:0', deviceName: 'RTX 4090', vram: 7, queue: 0, prio: 0, est: 'Finished in 11m 03s', node: '', pct: '', reason: '', started: '19:38:01', dur: '11m 03s', updated: '19:49:04', client: 'gui', session: 's-4f2a' },
+      { id: 'run_01JB2JT3HB', wf: 'image-gen-sdxl', ver: '0.9.1', status: 'failed', runtime: 'diffusers', device: 'cuda:1', deviceName: 'RTX 3090', vram: 14.2, queue: 0, prio: 0, est: 'Stopped after 22 s', node: 'load_model', pct: '', reason: 'out of memory, needed 14.2 GB', started: '19:35:20', dur: '22 s', updated: '19:35:42', client: 'gui', session: 's-4f2a' },
+      { id: 'run_01JB2JQ9XA', wf: 'transcribe-meeting', ver: '2.0.0', status: 'cancelled', runtime: 'whisper', device: 'cuda:0', deviceName: 'RTX 4090', vram: 8, queue: 0, prio: 0, est: 'Stopped after 1m 10s', node: 'transcribe', pct: '', reason: 'cancelled from the GUI', started: '19:30:05', dur: '1m 10s', updated: '19:31:15', client: 'gui', session: 's-4f2a' }
+    ];
+  }
+  wfMap() {
+    return {
+      'ingest-docs-rag': { model: 'pumas://models/bge-m3', nodes: [['read_docs', 'read-file', 'text'], ['chunking', 'expand-settings', 'settings'], ['split', 'processing', 'chunks'], ['embed_chunks', 'embedding', 'embedding'], ['index', 'vector-output', ''], ['manifest', 'write-file', '']] },
+      'image-gen-sdxl': { model: 'pumas://models/sdxl-base-1.0', nodes: [['prompt', 'text-input', 'text'], ['load_model', 'puma-lib', 'model_path'], ['sample', 'pytorch-inference', 'latents'], ['decode', 'image-output', 'image'], ['unload', 'unload-model', '']] },
+      'transcribe-meeting': { model: 'pumas://models/whisper-large-v3', nodes: [['audio', 'audio-input', 'audio'], ['transcribe', 'onnx-inference', 'transcript'], ['notes', 'text-output', 'text']] },
+      'summarize-daily': { model: 'pumas://models/qwen3-8b-instruct', nodes: [['fetch', 'read-file', 'text'], ['summarize', 'llm-inference', 'response'], ['write', 'write-file', '']] },
+      'embed-corpus': { model: 'pumas://models/bge-m3', nodes: [['read', 'read-file', 'text'], ['embed', 'embedding', 'embedding'], ['index', 'vector-output', '']] }
+    };
+  }
+  nodeStates(run) {
+    const wf = this.wfMap()[run.wf] || { nodes: [['start', 'processing', 'out'], ['end', 'text-output', '']] };
+    const idx = wf.nodes.findIndex((n) => n[0] === run.node);
+    return wf.nodes.map(([id, type, port], i) => {
+      let state = 'queued';
+      if (run.status === 'succeeded') state = 'succeeded';
+      else if (run.status === 'running') state = i < idx ? 'succeeded' : i === idx ? 'running' : 'queued';
+      else if (run.status === 'failed') state = i < idx ? 'succeeded' : i === idx ? 'failed' : 'skipped';
+      else if (run.status === 'cancelled') state = i < idx ? 'succeeded' : i === idx ? 'cancelled' : 'skipped';
+      const glyph = state === 'skipped' ? 'g-cancelled' : 'g-' + state;
+      return { id, type, port, state, glyph, label: state === 'skipped' ? 'skipped' : state };
+    });
+  }
+  decorateRun(r) {
+    const labels = { running: 'Running', waiting: 'Waiting', queued: 'Queued', succeeded: 'Succeeded', failed: 'Failed', cancelled: 'Cancelled' };
+    const isLive = r.status === 'running' || r.status === 'waiting' || r.status === 'queued';
+    let context = '';
+    if (r.status === 'running') context = ', ' + r.node + (r.pct ? ' ' + r.pct : '');
+    else if (r.status === 'waiting') context = ', ' + r.reason;
+    else if (r.status === 'queued') context = ', #' + r.queue + ' in queue';
+    else if (r.reason) context = ', ' + r.reason;
+    else context = ', ' + r.dur;
+    const placement = r.device ? r.runtime + ' on ' + r.device : r.runtime + ', device not assigned yet';
+    const placementLong = r.device ? r.runtime + ' on ' + r.device + ' (' + r.deviceName + ')' : 'Not assigned to a device yet';
+    let progress = r.est;
+    if (r.status === 'running') progress = r.node + ', ' + r.pct;
+    else if (r.status === 'waiting') progress = 'Waiting: ' + r.reason;
+    else if (r.status === 'queued') progress = 'Queue position ' + r.queue + ', ' + r.reason;
+    else if (r.status === 'failed') progress = 'Failed in ' + r.node + ': ' + r.reason;
+    const chips = [];
+    if (r.device) chips.push({ text: r.runtime + ' on ' + r.device });
+    if (r.prio) chips.push({ text: 'priority ' + r.prio });
+    if (r.queue) chips.push({ text: '#' + r.queue + ' in queue' });
+    return { ...r, glyph: 'g-' + r.status, stClass: r.status === 'failed' ? 'st-failed' : '', statusLabel: labels[r.status], contextSuffix: context, placement, placementLong, progress, chips, isLive,
+      model: (this.wfMap()[r.wf] || {}).model || 'none', hoverOn: () => { this._hoverRun = r.id; }, hoverOff: () => { if (this._hoverRun === r.id) this._hoverRun = null; } };
+  }
+  ctxBind() {
+    if (this._ctxBound || typeof document === 'undefined') return;
+    this._ctxBound = true;
+    const isField = (t) => t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT');
+    document.addEventListener('keydown', (e) => {
+      const k = (e.key || '').toLowerCase(); const mod = e.ctrlKey || e.metaKey;
+      if (e.key === 'Escape' && this.state && this.state.pickerOpen) { this.setState({ pickerOpen: false }); return; }
+      if (!mod || isField(e.target)) return;
+      if (k === 'c' && this._hoverRun) this.copyRun(this._hoverRun);
+      if (k === 'v' && this._hoverCtx) { e.preventDefault(); this.pasteRun(); }
+    });
+    document.addEventListener('mousedown', (e) => {
+      if (this.state && this.state.pickerOpen && !(e.target.closest && e.target.closest('.ctxwrap'))) this.setState({ pickerOpen: false });
+    });
+    window.addEventListener('storage', (e) => { if (e.key === 'pg.run') this.setState({ run: e.newValue || null }); });
+  }
+  copyRun(id) {
+    try { localStorage.setItem('pg.clip', id); } catch (_) {}
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(id).catch(() => {});
+    this.setState({ copied: id });
+    clearTimeout(this._copyT); this._copyT = setTimeout(() => this.setState({ copied: null }), 1600);
+  }
+  pasteRun() {
+    const apply = (text) => { const id = (text || '').trim(); if (this.catalog().some((r) => r.id === id)) this.pickRun(id); else this.setState({ pickerOpen: true, pickerQuery: id }); };
+    let fallback = ''; try { fallback = localStorage.getItem('pg.clip') || ''; } catch (_) {}
+    if (navigator.clipboard && navigator.clipboard.readText) navigator.clipboard.readText().then(apply, () => apply(fallback)); else apply(fallback);
+  }
+  pickRun(id) {
+    try { localStorage.setItem('pg.run', id || ''); } catch (_) {}
+    this.setState({ run: id || null, pickerOpen: false, pickerQuery: '', confirmCancel: false });
+  }
+  ctxRunId(fallback) {
+    const st = this.state || {};
+    if ('run' in st) return st.run;
+    try { const v = localStorage.getItem('pg.run'); if (v !== null) return v || null; } catch (_) {}
+    return fallback;
+  }
+  ctxVals(fallbackId) {
+    this.ctxBind();
+    const st = this.state || {};
+    const runId = this.ctxRunId(fallbackId);
+    const all = this.catalog();
+    const selRaw = all.find((r) => r.id === runId);
+    const sel = this.decorateRun(selRaw || all[0]);
+    const qRaw = st.pickerQuery || ''; const q = qRaw.toLowerCase();
+    const match = (r) => !q || r.wf.includes(q) || r.id.toLowerCase().includes(q) || ('v' + r.ver).includes(q);
+    const groups = [['Running', ['running']], ['Waiting for memory', ['waiting']], ['Queued', ['queued']], ['Finished today', ['succeeded', 'failed', 'cancelled']]]
+      .map(([title, keys]) => { const runs = all.filter((r) => keys.includes(r.status) && match(r)).map((r) => ({ ...this.decorateRun(r), selected: r.id === runId, pick: () => this.pickRun(r.id) })); return { title, n: runs.length, runs }; })
+      .filter((g) => g.n);
+    const total = groups.reduce((n, g) => n + g.n, 0);
+    return {
+      runId, hasSel: !!selRaw, noSel: !selRaw, sel, ctxHas: !!selRaw, ctxNone: !selRaw, ctxRun: sel,
+      pickerOpen: !!st.pickerOpen, pickerQuery: qRaw, pickerGroups: groups,
+      pickerEmpty: total === 0, pickerEmptyText: q.startsWith('run_') ? 'No run with id ' + qRaw + ' in today\'s history.' : 'No runs match.',
+      togglePicker: () => this.setState({ pickerOpen: !st.pickerOpen }),
+      openPicker: () => this.setState({ pickerOpen: true }),
+      setQuery: (e) => { const v = e.target.value; if (all.some((r) => r.id === v.trim())) this.pickRun(v.trim()); else this.setState({ pickerQuery: v }); },
+      clearSel: () => this.pickRun(null),
+      ctxHoverOn: () => { this._hoverCtx = true; }, ctxHoverOff: () => { this._hoverCtx = false; },
+      copied: !!st.copied, copiedId: st.copied || ''
+    };
+  }
+  /*ctx-end*/
+  defs() {
+    return [
+      { id: 'rerank', label: 'Rerank chunks', type: 'rerank-chunks', ver: '0.3.0', mine: true, state: 'draft', runtime: 'python worker', when: '19:40', sub: 'draft, not published', desc: 'Scores retrieved chunks against the query with a cross-encoder and keeps the top k.', ins: [{ name: 'query', type: 'text', def: '' }, { name: 'chunks', type: 'json', def: '' }, { name: 'top_k', type: 'number', def: '8' }], outs: [{ name: 'chunks', type: 'json', ret: 'payload' }, { name: 'scores', type: 'json', ret: 'metadata only' }], code: 'def run(ctx, query, chunks, top_k=8):\n    model = ctx.model("pumas://models/bge-reranker-v2-m3")\n    scored = model.score(query, [c["text"] for c in chunks])\n    order = sorted(range(len(chunks)), key=lambda i: -scored[i])[:top_k]\n    return {"chunks": [chunks[i] for i in order],\n            "scores": [scored[i] for i in order]}' },
+      { id: 'dedupe', label: 'Deduplicate', type: 'dedupe-text', ver: '1.0.2', mine: true, state: 'published', runtime: 'none (pure)', when: 'Oct 28', sub: 'published, used by 2 workflows', desc: 'Drops near-duplicate chunks using a simhash threshold.', ins: [{ name: 'chunks', type: 'json', def: '' }, { name: 'threshold', type: 'number', def: '0.92' }], outs: [{ name: 'chunks', type: 'json', ret: 'payload' }], code: 'def run(ctx, chunks, threshold=0.92):\n    seen, out = [], []\n    for c in chunks:\n        h = simhash(c["text"])\n        if all(sim(h, s) < threshold for s in seen):\n            seen.append(h); out.append(c)\n    return {"chunks": out}' },
+      { id: 'meeting-notes', label: 'Meeting notes', type: 'meeting-notes', ver: '0.1.0', mine: true, state: 'failed', runtime: 'llama.cpp', when: 'Oct 25', sub: 'last check failed: output type mismatch', desc: 'Turns a transcript into decisions, actions and open questions.', ins: [{ name: 'transcript', type: 'text', def: '' }, { name: 'model', type: 'model_ref', def: '' }], outs: [{ name: 'notes', type: 'markdown', ret: 'payload' }], code: 'def run(ctx, transcript, model):\n    prompt = PROMPT.format(transcript=transcript)\n    return {"notes": ctx.generate(model, prompt)}' },
+      { id: 'embedding', label: 'Embedding', type: 'embedding', ver: '2.4.0', mine: false, state: 'builtin', runtime: 'llama.cpp', when: 'built-in', sub: 'built-in, read-only', desc: 'Embeds text with a local embedding model.', ins: [{ name: 'text', type: 'text', def: '' }, { name: 'model', type: 'model_ref', def: '' }], outs: [{ name: 'embedding', type: 'tensor', ret: 'payload' }, { name: 'metadata', type: 'json', ret: 'metadata only' }], code: '# built-in, source not editable', readonly: true },
+      { id: 'llm', label: 'LLM inference', type: 'llm-inference', ver: '3.1.0', mine: false, state: 'builtin', runtime: 'llama.cpp', when: 'built-in', sub: 'built-in, read-only', desc: 'Generates text from a prompt with a local model.', ins: [{ name: 'prompt', type: 'text', def: '' }, { name: 'system_prompt', type: 'text', def: '' }, { name: 'temperature', type: 'number', def: '0.7' }, { name: 'top_p', type: 'number', def: '0.95' }], outs: [{ name: 'response', type: 'text', ret: 'payload' }, { name: 'stream', type: 'stream', ret: 'not retained' }, { name: 'model_ref', type: 'model_ref', ret: 'metadata only' }], code: '# built-in, source not editable', readonly: true }
+    ];
+  }
+  renderVals() {
+    const st = this.state || {};
+    const ctx = this.ctxVals(null);
+    const selId = st.sel || 'rerank';
+    const dirty = !!st.dirty;
+    const unavailable = !!this.props.unavailable;
+    const glyph = { draft: 'g-queued', published: 'g-succeeded', failed: 'g-failed', builtin: 'g-idle' };
+    const defs = this.defs().map(d => ({ ...d, glyph: glyph[d.state], selected: d.id === selId, pick: () => this.setState({ sel: d.id, dirty: false }) }));
+    const sel = defs.find(d => d.id === selId) || defs[0];
+    const groups = [{ title: 'Your nodes', items: defs.filter(d => d.mine) }, { title: 'Built-in', items: defs.filter(d => !d.mine) }].map(g => ({ ...g, n: g.items.length }));
+    const checks = sel.state === 'failed'
+      ? [{ glyph: 'g-succeeded', text: 'Ports are named and typed' }, { glyph: 'g-failed', text: 'Output notes declares markdown but the code returns text' }, { glyph: 'g-succeeded', text: 'Runtime llama.cpp is installed' }, { glyph: 'g-queued', text: 'Not tried yet' }]
+      : sel.readonly ? [{ glyph: 'g-succeeded', text: 'Built-in node, always valid' }]
+      : [{ glyph: 'g-succeeded', text: 'Ports are named and typed' }, { glyph: 'g-succeeded', text: 'Code defines run(ctx, …) with matching inputs' }, { glyph: 'g-succeeded', text: 'Model pumas://models/bge-reranker-v2-m3 is in the Library' }, { glyph: st.tried ? 'g-succeeded' : 'g-queued', text: st.tried ? 'Tried 20:06, 8 chunks in 0.9 s' : 'Not tried yet' }];
+    return {
+      ...ctx,
+      accent: this.props.accent ?? '#D9B06A',
+      unavailable,
+      dimLine: '3 of your nodes, 1 draft, 1 published, 1 failing its checks. 21 built-in',
+      groups, sel, checks,
+      saveLabel: dirty ? 'Save draft' : 'Saved',
+      dirtyIt: () => this.setState({ dirty: true }),
+      save: () => this.setState({ dirty: false }),
+      cannotPublish: unavailable || sel.readonly || sel.state === 'failed' || dirty,
+      publishTitle: unavailable ? 'Publishing is off in this build' : sel.readonly ? 'Built-in nodes are already published' : sel.state === 'failed' ? 'Fix the failing check first' : dirty ? 'Save the draft first' : 'Makes ' + sel.type + ' v' + sel.ver + ' available in Graph',
+      tryLabel: st.tried ? 'Try again' : 'Try with sample inputs',
+      tryNote: st.tried ? 'Done in 0.9 s, see Checks' : '',
+      tryIt: () => { if (!unavailable) this.setState({ tried: true }); }
+    };
+  }
+}
+</script>
+</body>
+</html>

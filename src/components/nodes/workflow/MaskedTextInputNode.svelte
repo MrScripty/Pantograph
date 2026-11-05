@@ -1,5 +1,6 @@
 <script lang="ts">
   import BaseNode from '../BaseNode.svelte';
+  import NodeHeaderTitle from './NodeHeaderTitle.svelte';
   import type { NodeDefinition } from '../../../services/workflow/types';
   import { updateNodeData } from '../../../stores/workflowStore';
 
@@ -125,7 +126,6 @@
 
   let { id, data, selected = false }: Props = $props();
 
-  const nodeColor = '#14b8a6';
   const segmentsFromData = () => normalizeSegments(
     data.segments && data.segments.length > 0
       ? data.segments
@@ -213,25 +213,10 @@
   }
 </script>
 
-<div class="masked-text-input-wrapper" style="--node-color: {nodeColor}">
+<div class="masked-text-input-wrapper">
   <BaseNode {id} {data} {selected}>
     {#snippet header()}
-      <div class="flex items-center gap-2">
-        <div
-          class="w-5 h-5 rounded flex items-center justify-center flex-shrink-0"
-          style="background-color: {nodeColor}"
-        >
-          <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-            />
-          </svg>
-        </div>
-        <span class="text-sm font-medium text-neutral-200">{data.label || 'Masked Text Input'}</span>
-      </div>
+      <NodeHeaderTitle label={data.label || 'Masked Text Input'} />
     {/snippet}
 
       <div class="masked-text-content">
@@ -257,7 +242,7 @@
 
         <textarea
           bind:this={editorRef}
-          class="editor-area w-full bg-neutral-900 border border-neutral-600 rounded px-2 py-1.5 text-sm text-neutral-200 focus:outline-none"
+          class="editor-area w-full bg-pg-panel-sunken border border-pg-border rounded px-2 py-1.5 text-sm text-pg-text"
           value={editorText}
           oninput={handleInput}
           onselect={cacheSelection}
@@ -270,7 +255,7 @@
 
         <div class="segment-preview mt-1.5">
           {#if editorText.length === 0}
-            <span class="text-[10px] text-neutral-600 italic">No segments yet</span>
+            <span class="text-[10px] text-pg-text-muted italic">No segments yet</span>
           {:else}
             {#each segments as seg, index (`${index}-${seg.masked}-${seg.text}`)}
               {#if seg.text.length > 0}
@@ -288,13 +273,13 @@
         </div>
 
         <!-- Legend -->
-        <div class="flex items-center gap-3 mt-1.5 text-[10px] text-neutral-500">
+        <div class="flex items-center gap-3 mt-1.5 text-[10px] text-pg-text-muted">
           <div class="flex items-center gap-1">
-            <span class="inline-block w-2.5 h-2.5 rounded-sm" style="background-color: rgba(34, 197, 94, 0.25); border: 1px solid rgba(34, 197, 94, 0.4);"></span>
+            <span class="legend-swatch segment-chip--anchored" aria-hidden="true"></span>
             <span>Anchored</span>
           </div>
           <div class="flex items-center gap-1">
-            <span class="inline-block w-2.5 h-2.5 rounded-sm" style="background-color: rgba(163, 163, 163, 0.15); border: 1px solid rgba(163, 163, 163, 0.3);"></span>
+            <span class="legend-swatch segment-chip--masked" aria-hidden="true"></span>
             <span>Masked</span>
           </div>
         </div>
@@ -303,35 +288,17 @@
 </div>
 
 <style>
-  .masked-text-input-wrapper :global(.base-node) {
-    border-color: color-mix(in srgb, var(--node-color) 50%, transparent);
-  }
-
-  .masked-text-input-wrapper :global(.node-header) {
-    background-color: color-mix(in srgb, var(--node-color) 20%, transparent);
-    border-color: color-mix(in srgb, var(--node-color) 30%, transparent);
-  }
-
   .toolbar-btn {
-    background-color: #262626;
-    border: 1px solid #404040;
-    color: #a3a3a3;
+    background-color: var(--pg-panel-raised);
+    border: 1px solid var(--pg-border);
+    color: var(--pg-text-soft);
     cursor: pointer;
   }
 
   .toolbar-btn:hover {
-    background-color: #404040;
-    color: #e5e5e5;
-  }
-
-  .anchor-btn:hover {
-    border-color: #22c55e;
-    color: #22c55e;
-  }
-
-  .mask-btn:hover {
-    border-color: #a3a3a3;
-    color: #a3a3a3;
+    background-color: var(--pg-panel-selected);
+    border-color: var(--pg-border-strong);
+    color: var(--pg-text);
   }
 
   .editor-area {
@@ -344,10 +311,6 @@
     word-break: break-word;
     line-height: 1.5;
     font-family: inherit;
-  }
-
-  .editor-area:focus {
-    border-color: #14b8a6;
   }
 
   .segment-preview {
@@ -367,15 +330,22 @@
     word-break: break-word;
   }
 
+  .legend-swatch {
+    display: inline-block;
+    width: 0.625rem;
+    height: 0.625rem;
+    border-radius: 2px;
+  }
+
   .segment-chip--anchored {
-    color: #86efac;
-    border: 1px solid rgba(34, 197, 94, 0.4);
-    background: rgba(34, 197, 94, 0.2);
+    color: var(--pg-text);
+    border: 1px solid var(--pg-border-strong);
+    background: var(--pg-panel-selected);
   }
 
   .segment-chip--masked {
-    color: #d4d4d4;
-    border: 1px solid rgba(163, 163, 163, 0.35);
-    background: rgba(163, 163, 163, 0.15);
+    color: var(--pg-text-muted);
+    border: 1px dashed var(--pg-border-strong);
+    background: transparent;
   }
 </style>

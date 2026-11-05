@@ -1,7 +1,20 @@
+/**
+ * Scheduler page filter state and view preferences.
+ *
+ * The run rows themselves are not stored here: the Scheduler reads the one
+ * run-list projection owned by the shell (`runContextRunList` in
+ * `src/components/workbench/shell/runContextStore.ts`, issue WR-005) and
+ * applies these filters to it in `schedulerPagePresenters.ts`.
+ */
 import { writable, type Readable } from 'svelte/store';
 import type { RunListProjectionStatus } from '../services/diagnostics/types';
 
 export type SchedulerStatusFilter = 'all' | RunListProjectionStatus;
+
+/** The coarse status segment above the run list (All, Active, Queued, Done, Failed). */
+export type SchedulerStatusSegment = 'all' | 'active' | 'queued' | 'done' | 'failed';
+
+export const SCHEDULER_STATUS_SEGMENTS: SchedulerStatusSegment[] = ['all', 'active', 'queued', 'done', 'failed'];
 
 export type SchedulerSortKey =
   | 'last_updated_desc'
@@ -12,6 +25,7 @@ export type SchedulerSortKey =
 
 export interface SchedulerRunFilters {
   search: string;
+  statusSegment: SchedulerStatusSegment;
   status: SchedulerStatusFilter;
   schedulerPolicy: string;
   retentionPolicy: string;
@@ -26,33 +40,6 @@ export interface SchedulerRunFilters {
   selectedNetworkNode: string;
   acceptedDate: string;
   sort: SchedulerSortKey;
-}
-
-export const SCHEDULER_RUN_COLUMN_IDS = [
-  'status',
-  'workflow',
-  'run_id',
-  'accepted',
-  'queued',
-  'started',
-  'completed',
-  'duration',
-  'queue_position',
-  'priority',
-  'estimate',
-  'scheduler_reason',
-  'policy',
-  'retention',
-  'selected_runtime',
-  'selected_device',
-  'selected_network_node',
-  'updated',
-] as const;
-
-export type SchedulerRunColumnId = (typeof SCHEDULER_RUN_COLUMN_IDS)[number];
-
-export interface SchedulerRunColumnState {
-  visibleColumns: SchedulerRunColumnId[];
 }
 
 export const SCHEDULER_STATUS_FILTERS: SchedulerStatusFilter[] = [
@@ -76,8 +63,32 @@ export const SCHEDULER_SORT_OPTIONS: { label: string; value: SchedulerSortKey }[
   { label: 'Status', value: 'status_asc' },
 ];
 
+/**
+ * The filters that live in the Filters disclosure (every field except the
+ * search text and the status segment). Applied ones are shown as chips.
+ */
+export type SchedulerSecondaryFilterKey = Exclude<keyof SchedulerRunFilters, 'search' | 'statusSegment'>;
+
+export const SCHEDULER_SECONDARY_FILTER_KEYS: SchedulerSecondaryFilterKey[] = [
+  'status',
+  'sort',
+  'schedulerPolicy',
+  'retentionPolicy',
+  'client',
+  'clientSession',
+  'bucket',
+  'selectedRuntime',
+  'selectedRuntimeVariant',
+  'selectedBackend',
+  'selectedDeviceClass',
+  'selectedDevice',
+  'selectedNetworkNode',
+  'acceptedDate',
+];
+
 export const DEFAULT_SCHEDULER_RUN_FILTERS: SchedulerRunFilters = {
   search: '',
+  statusSegment: 'all',
   status: 'all',
   schedulerPolicy: 'all',
   retentionPolicy: 'all',
@@ -94,9 +105,25 @@ export const DEFAULT_SCHEDULER_RUN_FILTERS: SchedulerRunFilters = {
   sort: 'last_updated_desc',
 };
 
-export const DEFAULT_SCHEDULER_RUN_COLUMN_STATE: SchedulerRunColumnState = {
-  visibleColumns: [...SCHEDULER_RUN_COLUMN_IDS],
+export interface SchedulerViewPreferences {
+  /**
+   * Show the device memory strip under the dimension line. The strip renders
+   * a sentence instead of lanes until the local network status projection
+   * reports per-device memory (issue WR-006).
+   */
+  showLanes: boolean;
+}
+
+export const DEFAULT_SCHEDULER_VIEW_PREFERENCES: SchedulerViewPreferences = {
+  showLanes: true,
 };
+
+function isSchedulerStatusSegment(value: unknown): value is SchedulerStatusSegment {
+  return (
+    typeof value === 'string' &&
+    SCHEDULER_STATUS_SEGMENTS.includes(value as SchedulerStatusSegment)
+  );
+}
 
 function isSchedulerStatusFilter(value: unknown): value is SchedulerStatusFilter {
   return (
@@ -112,13 +139,6 @@ function isSchedulerSortKey(value: unknown): value is SchedulerSortKey {
   );
 }
 
-function isSchedulerRunColumnId(value: unknown): value is SchedulerRunColumnId {
-  return (
-    typeof value === 'string' &&
-    SCHEDULER_RUN_COLUMN_IDS.includes(value as SchedulerRunColumnId)
-  );
-}
-
 function normalizeOption(value: unknown): string {
   return typeof value === 'string' && value.trim().length > 0 ? value : 'all';
 }
@@ -128,6 +148,7 @@ export function normalizeSchedulerRunFilters(
 ): SchedulerRunFilters {
   return {
     search: typeof filters?.search === 'string' ? filters.search : '',
+    statusSegment: isSchedulerStatusSegment(filters?.statusSegment) ? filters.statusSegment : 'all',
     status: isSchedulerStatusFilter(filters?.status) ? filters.status : 'all',
     schedulerPolicy: normalizeOption(filters?.schedulerPolicy),
     retentionPolicy: normalizeOption(filters?.retentionPolicy),
@@ -145,15 +166,6 @@ export function normalizeSchedulerRunFilters(
   };
 }
 
-export function normalizeSchedulerRunColumnState(
-  state: Partial<SchedulerRunColumnState> | null | undefined,
-): SchedulerRunColumnState {
-  const columns = state?.visibleColumns?.filter(isSchedulerRunColumnId) ?? [];
-  return {
-    visibleColumns: columns.length > 0 ? [...new Set(columns)] : [...SCHEDULER_RUN_COLUMN_IDS],
-  };
-}
-
 export function withSchedulerRunFilters(
   state: SchedulerRunFilters,
   patch: Partial<SchedulerRunFilters>,
@@ -164,46 +176,51 @@ export function withSchedulerRunFilters(
   });
 }
 
-export function withSchedulerRunColumnState(
-  state: SchedulerRunColumnState,
-  patch: Partial<SchedulerRunColumnState>,
-): SchedulerRunColumnState {
-  return normalizeSchedulerRunColumnState({
-    ...state,
-    ...patch,
-  });
+/** Reset every Filters-disclosure field; search and the status segment stay. */
+export function withSchedulerSecondaryFiltersCleared(state: SchedulerRunFilters): SchedulerRunFilters {
+  const defaults = Object.fromEntries(
+    SCHEDULER_SECONDARY_FILTER_KEYS.map((key) => [key, DEFAULT_SCHEDULER_RUN_FILTERS[key]]),
+  ) as Partial<SchedulerRunFilters>;
+  return withSchedulerRunFilters(state, defaults);
+}
+
+export function withSchedulerViewPreferences(
+  state: SchedulerViewPreferences,
+  patch: Partial<SchedulerViewPreferences>,
+): SchedulerViewPreferences {
+  return {
+    showLanes: typeof patch.showLanes === 'boolean' ? patch.showLanes : state.showLanes,
+  };
 }
 
 const schedulerRunFiltersStore = writable<SchedulerRunFilters>({
   ...DEFAULT_SCHEDULER_RUN_FILTERS,
 });
 
-const schedulerRunColumnStateStore = writable<SchedulerRunColumnState>({
-  visibleColumns: [...DEFAULT_SCHEDULER_RUN_COLUMN_STATE.visibleColumns],
+const schedulerViewPreferencesStore = writable<SchedulerViewPreferences>({
+  ...DEFAULT_SCHEDULER_VIEW_PREFERENCES,
 });
 
 export const schedulerRunFilters: Readable<SchedulerRunFilters> = {
   subscribe: schedulerRunFiltersStore.subscribe,
 };
 
-export const schedulerRunColumnState: Readable<SchedulerRunColumnState> = {
-  subscribe: schedulerRunColumnStateStore.subscribe,
+export const schedulerViewPreferences: Readable<SchedulerViewPreferences> = {
+  subscribe: schedulerViewPreferencesStore.subscribe,
 };
 
 export function setSchedulerRunFilters(patch: Partial<SchedulerRunFilters>): void {
   schedulerRunFiltersStore.update((state) => withSchedulerRunFilters(state, patch));
 }
 
-export function setSchedulerRunColumnState(patch: Partial<SchedulerRunColumnState>): void {
-  schedulerRunColumnStateStore.update((state) => withSchedulerRunColumnState(state, patch));
+export function clearSchedulerSecondaryFilters(): void {
+  schedulerRunFiltersStore.update(withSchedulerSecondaryFiltersCleared);
 }
 
 export function resetSchedulerRunFilters(): void {
   schedulerRunFiltersStore.set({ ...DEFAULT_SCHEDULER_RUN_FILTERS });
 }
 
-export function resetSchedulerRunColumnState(): void {
-  schedulerRunColumnStateStore.set({
-    visibleColumns: [...DEFAULT_SCHEDULER_RUN_COLUMN_STATE.visibleColumns],
-  });
+export function setSchedulerViewPreferences(patch: Partial<SchedulerViewPreferences>): void {
+  schedulerViewPreferencesStore.update((state) => withSchedulerViewPreferences(state, patch));
 }

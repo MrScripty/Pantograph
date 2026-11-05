@@ -164,6 +164,7 @@
   <!-- Graph editor -->
   <div class="flex-1 relative">
     <SvelteFlow
+      proOptions={{ hideAttribution: true }}
       bind:nodes
       bind:edges
       {nodeTypes}

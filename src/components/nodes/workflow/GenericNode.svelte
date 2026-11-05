@@ -1,7 +1,6 @@
 <script lang="ts">
   import BaseNode from '../BaseNode.svelte';
   import type { NodeDefinition } from '../../../services/workflow/types';
-  import { nodeExecutionStates } from '../../../stores/workflowStore';
 
   interface Props {
     id: string;
@@ -13,49 +12,10 @@
   }
 
   let { id, data, selected = false }: Props = $props();
-
-  let executionState = $derived($nodeExecutionStates.get(id) || 'idle');
-
-  let statusColor = $derived(
-    {
-      idle: 'bg-neutral-500',
-      running: 'bg-blue-500 animate-pulse',
-      success: 'bg-green-500',
-      error: 'bg-red-500',
-    }[executionState]
-  );
-
-  let statusText = $derived(
-    {
-      idle: 'Idle',
-      running: 'Running...',
-      success: 'Complete',
-      error: 'Error',
-    }[executionState]
-  );
-
-  let categoryColor = $derived(
-    {
-      input: 'border-blue-600/50',
-      processing: 'border-green-600/50',
-      tool: 'border-amber-600/50',
-      output: 'border-cyan-600/50',
-      control: 'border-purple-600/50',
-    }[data.definition?.category || 'processing']
-  );
 </script>
 
-<div class="generic-node-wrapper {categoryColor}">
-  <BaseNode {id} {data} {selected}>
-      <div class="flex items-center gap-2">
-        <span class="w-2 h-2 rounded-full {statusColor}"></span>
-        <span class="text-xs text-neutral-400">{statusText}</span>
-      </div>
-  </BaseNode>
+<!-- BaseNode's header glyph (with its screen-reader text and title) carries the
+     execution state; category is not colour-coded on the canvas. -->
+<div class="generic-node-wrapper">
+  <BaseNode {id} {data} {selected} />
 </div>
-
-<style>
-  .generic-node-wrapper :global(.base-node) {
-    border-color: inherit;
-  }
-</style>

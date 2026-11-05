@@ -1,21 +1,11 @@
 <script lang="ts">
-  import { onDestroy, onMount } from 'svelte';
-  import { createArtifactDownloadLifecycle, type PendingArtifactDownload } from './artifactDownloadLifecycle';
-  import {
-    Braces,
-    Check,
-    CircleHelp,
-    Download,
-    Eye,
-    File,
-    FileText,
-    Image as ImageIcon,
-    Music,
-    RefreshCw,
-    Settings,
-    Table2,
-    Video,
-  } from 'lucide-svelte';
+  // I/O Inspector (workbench redesign M3, docs/design/workbench-redesign-spec.md).
+  // Left: the selected run's nodes, each expandable to its retained ports.
+  // Right: one artifact with Read body / Read stream / Download / Acknowledge.
+  // Data authority is unchanged: `queryRunInspection` for the run, the artifact
+  // descriptor/read/stream/consume commands for bodies, and `listWorkflows` +
+  // `inspectWorkflowGraph` for the saved-workflow disclosure in the no-run state.
+  import { onDestroy, onMount, tick, untrack } from 'svelte';
   import type {
     IoArtifactProjectionRecord,
     IoArtifactRetentionSummaryRecord,
@@ -32,42 +22,60 @@
     WorkflowRunGraphProjection,
   } from '../../services/workflow/types';
   import { workflowService } from '../../services/workflow/WorkflowService';
+  import { activeWorkflowRun, focusSettingsSection } from '../../stores/workbenchStore';
+  import { openRunContextPicker } from './shell/runContextStore';
   import {
-    activeWorkflowRun,
-    focusSettingsSection,
-  } from '../../stores/workbenchStore';
+    Chip,
+    DimensionLine,
+    EmptyState,
+    ErrorCard,
+    FilterChip,
+    KeyValue,
+    SegmentedControl,
+    StatusGlyph,
+    glyphStateForStatus,
+    type SegmentOption,
+  } from './ui';
   import {
+    IO_ARTIFACT_PREVIEW_MAX_BYTES,
+    IO_INSPECTOR_BOUNDARY_NODE_ID,
+    applyIoInspectorBackendFilter,
     assertCompleteIoArtifactImageRead,
-    buildIoArtifactDescriptorMetadataRows,
+    buildIoArtifactChipLabels,
+    buildIoArtifactDetailSections,
     buildIoArtifactDownloadFilename,
     buildIoArtifactPreviewReadRequest,
     buildIoArtifactRendererSummary,
-    buildResolvedNodeIoDisplayRows,
-    canRenderIoArtifactTextPreview,
+    buildIoInspectorDimensionLabel,
+    buildIoInspectorNodeTree,
+    buildStaleGraphFactCards,
     canAcknowledgeIoArtifactConsumed,
     canReadIoArtifactBody,
+    canRenderIoArtifactTextPreview,
+    countIoInspectorEntriesByDirection,
+    createIoArtifactDownloadUrlOwner,
     decodeIoArtifactTextPreview,
-    formatIoArtifactAvailabilityLabel,
+    describeIoArtifactAcknowledgeUnavailable,
+    describeIoArtifactReadUnavailable,
+    describeIoArtifactStreamUnavailable,
+    filterIoInspectorNodeTree,
+    findIoInspectorEntry,
     formatIoArtifactBytes,
-    formatIoArtifactDetailValue,
-    formatIoArtifactEndpointValue,
-    formatIoArtifactMediaLabel,
     formatIoArtifactPreviewExtent,
     formatIoArtifactRetentionStateLabel,
-    formatIoArtifactRoleLabel,
+    formatIoInspectorDirectionMark,
+    formatIoInspectorEntryDetail,
+    formatIoInspectorNodeLabel,
+    formatIoInspectorNodeSubLabel,
     formatProjectionFreshness,
     formatResolvedNodeIoDirectionLabel,
-    formatResolvedNodeIoProvenance,
-    formatResolvedNodeIoResolutionLabel,
     ioArtifactPayloadTargetId,
-    isNormalResolvedNodeIoDisplayRow,
-    type ResolvedNodeIoDisplayRow,
+    partitionGraphDiagnosticsByNode,
+    resolveIoArtifactPreviewMode,
+    resolveIoInspectorSelectedEntryKey,
+    type IoInspectorDirectionFilter,
+    type IoInspectorTreeEntry,
   } from './ioInspectorPresenters';
-  import {
-    buildRunGraphNodeArtifactSummaries,
-    buildRunGraphNodeStatusMap,
-    runGraphStaleDiagnosticClass,
-  } from './runGraphPresenters';
   import {
     buildSavedGraphInspectionDisplayModel,
     buildSavedGraphInspectionOptions,
@@ -75,7 +83,6 @@
     resolveSavedWorkflowInspectionPath,
     type SavedGraphInspectionOption,
   } from './graphInspectionPresenters';
-  import RunGraphSnapshot from './RunGraphSnapshot.svelte';
   import SavedGraphInspectionSnapshot from './SavedGraphInspectionSnapshot.svelte';
   import { formatWorkflowCommandError } from './workflowErrorPresenters';
 
@@ -96,77 +103,101 @@
     lifecycleGeneration: number;
   }
 
+  const DOWNLOAD_OBJECT_URL_REVOKE_DELAY_MS = 30_000;
   const IMAGE_PREVIEW_DECODE_ERROR = 'Image preview could not be decoded.';
+  const PREVIEW_LIMIT_LABEL = formatIoArtifactBytes(IO_ARTIFACT_PREVIEW_MAX_BYTES);
 
+  // Run inspection projection (one `queryRunInspection` response).
   let runGraph = $state<WorkflowRunGraphProjection | null>(null);
-  let savedWorkflows = $state<WorkflowMetadata[]>([]);
-  let savedWorkflowOptions = $state<SavedGraphInspectionOption[]>([]);
-  let selectedSavedWorkflowPath = $state<string | null>(null);
-  let savedGraphInspection = $state<WorkflowGraphInspectionProjection | null>(null);
   let runNodeStatuses = $state<NodeStatusProjectionRecord[]>([]);
   let artifacts = $state<IoArtifactProjectionRecord[]>([]);
   let resolvedNodeIo = $state<ResolvedNodeIoRecord[]>([]);
   let retentionSummary = $state<IoArtifactRetentionSummaryRecord[]>([]);
   let projectionState = $state<ProjectionStateRecord | null>(null);
-  let selectedNodeId = $state<string | null>(null);
-  let selectedBackendFilter = $state('');
   let loadingInspector = $state(false);
-  let inspectorError = $state<string | null>(null);
+  let runInspectorError = $state<string | null>(null);
+  let liveUpdatesError = $state<string | null>(null);
+
+  // Presentation state for the tree and filters.
+  let selectedEntryKey = $state<string | null>(null);
+  let collapsedNodes = $state<Record<string, boolean>>({});
+  let direction = $state<IoInspectorDirectionFilter>('all');
+  let search = $state('');
+  let filtersOpen = $state(false);
+  let selectedBackendFilter = $state('');
+
+  // Saved-workflow inspection (no-run disclosure).
+  let savedInspectionOpen = $state(false);
+  let savedWorkflows = $state<WorkflowMetadata[]>([]);
+  let savedWorkflowOptions = $state<SavedGraphInspectionOption[]>([]);
+  let selectedSavedWorkflowPath = $state<string | null>(null);
+  let savedGraphInspection = $state<WorkflowGraphInspectionProjection | null>(null);
+  let savedSelectedNodeId = $state<string | null>(null);
+  let loadingSavedGraph = $state(false);
+  let savedGraphError = $state<string | null>(null);
+
+  // Artifact body access, keyed by artifact id.
   let artifactBodyPreviews = $state<Record<string, ArtifactBodyPreview>>({});
   let artifactAccessLoading = $state<Record<string, boolean>>({});
   let artifactConsumeLoading = $state<Record<string, boolean>>({});
   let artifactAccessErrors = $state<Record<string, string>>({});
   let artifactConsumeMessages = $state<Record<string, string>>({});
+  let downloadLink = $state<{ url: string; filename: string } | null>(null);
+  let downloadAnchor = $state<HTMLAnchorElement | null>(null);
+
   let inspectorRequestSerial = 0;
   let savedGraphRequestSerial = 0;
   let artifactAccessRequestSerial = 0;
   let pageLifecycleGeneration = 0;
   let pageLive = false;
-  let inspectingSavedGraphs = false;
+  let inspectedRunId: string | null | undefined = undefined;
   let projectionUnsubscribe: (() => void) | null = null;
   let artifactAccessRequests: Record<string, ArtifactAccessRequest> = {};
-
-  let pendingDownloads = $state<PendingArtifactDownload[]>([]);
-  const downloadLifecycle = createArtifactDownloadLifecycle({
-    publish: (pending) => { pendingDownloads = pending; },
+  const downloadUrls = createIoArtifactDownloadUrlOwner({
+    delayMs: DOWNLOAD_OBJECT_URL_REVOKE_DELAY_MS,
+    revoke: revokeObjectUrl,
+    schedule: (callback, delayMs) => window.setTimeout(callback, delayMs),
+    cancel: (handle) => window.clearTimeout(handle),
   });
 
-  function activateDownload(node: HTMLAnchorElement, request: PendingArtifactDownload): void {
-    // The action runs for a Svelte-owned anchor; defer activation until mounting finishes.
-    queueMicrotask(() => downloadLifecycle.activate(request.id, () => node.click()));
-  }
-
-  let artifactSummaries = $derived(buildRunGraphNodeArtifactSummaries(artifacts));
-  let nodeStatuses = $derived(buildRunGraphNodeStatusMap(runNodeStatuses));
+  let tree = $derived(
+    buildIoInspectorNodeTree({
+      graphNodes: runGraph?.graph.nodes ?? [],
+      nodeStatuses: runNodeStatuses,
+      resolvedNodeIo,
+      artifacts,
+    }),
+  );
+  let visibleTree = $derived(filterIoInspectorNodeTree(tree, { direction, search }));
+  let directionCounts = $derived(
+    countIoInspectorEntriesByDirection(filterIoInspectorNodeTree(tree, { direction: 'all', search })),
+  );
+  let directionOptions = $derived<SegmentOption<IoInspectorDirectionFilter>[]>([
+    { value: 'all', label: 'All', count: directionCounts.all },
+    { value: 'input', label: 'Inputs', count: directionCounts.input },
+    { value: 'output', label: 'Outputs', count: directionCounts.output },
+  ]);
+  let effectiveEntryKey = $derived(resolveIoInspectorSelectedEntryKey(selectedEntryKey, tree));
+  let selectedEntry = $derived(findIoInspectorEntry(tree, effectiveEntryKey));
+  let graphDiagnostics = $derived(partitionGraphDiagnosticsByNode(runGraph?.graph_diagnostics ?? []));
+  let graphFactCards = $derived(buildStaleGraphFactCards(graphDiagnostics.graph));
+  let appliedBackendFilter = $derived(selectedBackendFilter.trim());
+  let dimensionLabel = $derived(
+    $activeWorkflowRun
+      ? buildIoInspectorDimensionLabel({
+          runId: $activeWorkflowRun.workflow_run_id,
+          nodeCount: tree.filter((node) => !node.boundary).length,
+          artifacts,
+          freshness: liveUpdatesError
+            ? `${formatProjectionFreshness(projectionState)}, live updates off`
+            : formatProjectionFreshness(projectionState),
+        })
+      : 'no run selected',
+  );
   let savedGraphModel = $derived(
     savedGraphInspection
-      ? buildSavedGraphInspectionDisplayModel(savedGraphInspection, selectedNodeId)
+      ? buildSavedGraphInspectionDisplayModel(savedGraphInspection, savedSelectedNodeId)
       : null,
-  );
-  let selectedInputRows = $derived(
-    selectedNodeId
-      ? buildResolvedNodeIoDisplayRows(
-          resolvedNodeIo.filter((record) => record.node_id === selectedNodeId && record.direction === 'input'),
-          artifacts,
-        ).filter(isNormalResolvedNodeIoDisplayRow).filter(hasResolvedNodeIoArtifact)
-      : [],
-  );
-  let selectedOutputRows = $derived(
-    selectedNodeId
-      ? buildResolvedNodeIoDisplayRows(
-          resolvedNodeIo.filter((record) => record.node_id === selectedNodeId && record.direction === 'output'),
-          artifacts,
-        ).filter(isNormalResolvedNodeIoDisplayRow).filter(hasResolvedNodeIoArtifact)
-      : [],
-  );
-  let selectedRows = $derived([...selectedOutputRows, ...selectedInputRows]);
-  let selectedRunGraphDiagnostics = $derived(
-    selectedNodeId
-      ? (runGraph?.graph_diagnostics ?? []).filter((diagnostic) => diagnostic.node_id === selectedNodeId)
-      : [],
-  );
-  let summarizedArtifactCount = $derived(
-    retentionSummary.reduce((total, item) => total + item.artifact_count, 0),
   );
 
   function activeRunId(): string | null {
@@ -177,7 +208,7 @@
     if (!pageLive) {
       return;
     }
-    inspectorError = formatWorkflowCommandError(subscriptionError);
+    liveUpdatesError = formatWorkflowCommandError(subscriptionError);
   }
 
   function formatTimestamp(value: number): string {
@@ -190,24 +221,16 @@
   ): Promise<void> {
     const requestSerial = ++inspectorRequestSerial;
     invalidatePendingArtifactAccess();
-    inspectorError = null;
+    runInspectorError = null;
     loadingInspector = true;
 
     if (!runId) {
-      runGraph = null;
-      runNodeStatuses = [];
-      artifacts = [];
-      resolvedNodeIo = [];
-      retentionSummary = [];
-      projectionState = null;
-      selectedNodeId = null;
-      revokeMissingArtifactObjectUrls([]);
+      clearRunInspectionState();
       loadingInspector = false;
       return;
     }
 
     try {
-      const selectedBackendKey = backendFilterValue.trim();
       const inspectionResponse = await workflowService.queryRunInspection({
         workflow_run_id: runId,
         artifact_limit: 250,
@@ -216,40 +239,24 @@
         return;
       }
 
-      const nextArtifacts =
-        selectedBackendKey.length > 0
-          ? inspectionResponse.io_artifacts.filter((artifact) => artifact.selected_backend_key === selectedBackendKey)
-          : inspectionResponse.io_artifacts;
-      const nextResolvedNodeIo = filterResolvedNodeIoByArtifacts(
+      const filtered = applyIoInspectorBackendFilter(
+        inspectionResponse.io_artifacts,
         inspectionResponse.resolved_node_io ?? [],
-        nextArtifacts,
-        selectedBackendKey,
+        backendFilterValue,
       );
-      revokeMissingArtifactObjectUrls(nextArtifacts);
+      revokeMissingArtifactObjectUrls(filtered.artifacts);
       runGraph = inspectionResponse.run_graph ?? null;
       runNodeStatuses = inspectionResponse.node_statuses;
-      artifacts = nextArtifacts;
-      resolvedNodeIo = nextResolvedNodeIo;
+      artifacts = filtered.artifacts;
+      resolvedNodeIo = filtered.resolvedNodeIo;
       retentionSummary = inspectionResponse.retention_summary;
       projectionState = inspectionResponse.io_projection_state;
-      selectedNodeId = resolveSelectedNodeId(
-        selectedNodeId,
-        inspectionResponse.run_graph,
-        nextArtifacts,
-      );
     } catch (error) {
       if (requestSerial !== inspectorRequestSerial) {
         return;
       }
-      inspectorError = formatWorkflowCommandError(error);
-      runGraph = null;
-      runNodeStatuses = [];
-      artifacts = [];
-      resolvedNodeIo = [];
-      retentionSummary = [];
-      projectionState = null;
-      selectedNodeId = null;
-      revokeMissingArtifactObjectUrls([]);
+      runInspectorError = formatWorkflowCommandError(error);
+      clearRunInspectionState();
     } finally {
       if (requestSerial === inspectorRequestSerial) {
         loadingInspector = false;
@@ -261,9 +268,8 @@
     requestedPath = selectedSavedWorkflowPath,
   ): Promise<void> {
     const requestSerial = ++savedGraphRequestSerial;
-    invalidatePendingArtifactAccess();
-    inspectorError = null;
-    loadingInspector = true;
+    savedGraphError = null;
+    loadingSavedGraph = true;
 
     try {
       const workflows = await workflowService.listWorkflows();
@@ -276,35 +282,40 @@
       savedWorkflows = workflows;
       savedWorkflowOptions = options;
       selectedSavedWorkflowPath = nextPath;
-      clearRunInspectionState();
 
       if (!nextPath) {
         savedGraphInspection = null;
-        selectedNodeId = null;
+        savedSelectedNodeId = null;
         return;
       }
 
       const projection = await workflowService.inspectWorkflowGraph({
         path: nextPath,
-        selected_node_id: selectedNodeId,
+        selected_node_id: savedSelectedNodeId,
       });
       if (requestSerial !== savedGraphRequestSerial) {
         return;
       }
       savedGraphInspection = projection;
-      selectedNodeId = resolveSavedGraphSelectedNodeId(selectedNodeId, projection);
+      savedSelectedNodeId = resolveSavedGraphSelectedNodeId(savedSelectedNodeId, projection);
     } catch (error) {
       if (requestSerial !== savedGraphRequestSerial) {
         return;
       }
-      inspectorError = formatWorkflowCommandError(error);
+      savedGraphError = formatWorkflowCommandError(error);
       savedGraphInspection = null;
-      selectedNodeId = null;
+      savedSelectedNodeId = null;
     } finally {
       if (requestSerial === savedGraphRequestSerial) {
-        loadingInspector = false;
+        loadingSavedGraph = false;
       }
     }
+  }
+
+  /** Supersede any saved-graph load in flight (a run was picked or the page closed). */
+  function supersedeSavedGraphInspection(): void {
+    savedGraphRequestSerial += 1;
+    loadingSavedGraph = false;
   }
 
   function clearRunInspectionState(): void {
@@ -315,53 +326,6 @@
     retentionSummary = [];
     projectionState = null;
     revokeMissingArtifactObjectUrls([]);
-  }
-
-  function resolveSelectedNodeId(
-    currentNodeId: string | null,
-    nextRunGraph: WorkflowRunGraphProjection | null | undefined,
-    nextArtifacts: IoArtifactProjectionRecord[],
-  ): string | null {
-    const nodeIds = nextRunGraph?.graph.nodes.map((node) => node.id) ?? [];
-    if (currentNodeId && nodeIds.includes(currentNodeId)) {
-      return currentNodeId;
-    }
-
-    const artifactNodeId = nextArtifacts
-      .map((artifact) => artifact.producer_node_id ?? artifact.consumer_node_id ?? artifact.node_id)
-      .find((nodeId): nodeId is string => Boolean(nodeId && nodeIds.includes(nodeId)));
-    return artifactNodeId ?? nodeIds[0] ?? null;
-  }
-
-  function hasResolvedNodeIoArtifact(
-    row: ResolvedNodeIoDisplayRow<IoArtifactProjectionRecord>,
-  ): row is ResolvedNodeIoDisplayRow<IoArtifactProjectionRecord> & {
-    artifact: IoArtifactProjectionRecord;
-  } {
-    return row.artifact !== null;
-  }
-
-  function filterResolvedNodeIoByArtifacts(
-    records: ResolvedNodeIoRecord[],
-    nextArtifacts: IoArtifactProjectionRecord[],
-    selectedBackendKey: string,
-  ): ResolvedNodeIoRecord[] {
-    if (selectedBackendKey.length === 0) {
-      return records;
-    }
-
-    const artifactFactIds = new Set(nextArtifacts.map((artifact) => artifact.artifact_fact_id).filter(isNonEmptyString));
-    const payloadArtifactIds = new Set(nextArtifacts.map((artifact) => artifact.payload_artifact_id).filter(isNonEmptyString));
-    const artifactIds = new Set(nextArtifacts.map((artifact) => artifact.artifact_id).filter(isNonEmptyString));
-    return records.filter((record) =>
-      (record.artifact_fact_id && artifactFactIds.has(record.artifact_fact_id)) ||
-      (record.payload_artifact_id && payloadArtifactIds.has(record.payload_artifact_id)) ||
-      (record.artifact_id && artifactIds.has(record.artifact_id)),
-    );
-  }
-
-  function isNonEmptyString(value: string | null | undefined): value is string {
-    return Boolean(value && value.trim().length > 0);
   }
 
   function beginArtifactAccessRequest(
@@ -425,7 +389,7 @@
     return Boolean(
       currentArtifact &&
         ioArtifactPayloadTargetId(currentArtifact) === ioArtifactPayloadTargetId(artifact) &&
-        selectedRows.some((row) => row.artifact?.artifact_id === artifact.artifact_id),
+        selectedEntry?.artifact.artifact_id === artifact.artifact_id,
     );
   }
 
@@ -498,6 +462,7 @@
 
   async function downloadArtifactBody(artifact: IoArtifactProjectionRecord): Promise<void> {
     if (!pageLive) return;
+    // Fence every await: a body that arrives after the page is gone never creates a URL or state.
     const lifecycleGeneration = pageLifecycleGeneration;
     const isCurrent = () => pageLive && pageLifecycleGeneration === lifecycleGeneration;
     const payloadArtifactId = ioArtifactPayloadTargetId(artifact);
@@ -509,19 +474,38 @@
       const read = await workflowService.readArtifactBody({ artifact_id: payloadArtifactId });
       if (!isCurrent()) return;
       assertCompleteIoArtifactImageRead(artifact, read.response);
-      const filename = buildIoArtifactDownloadFilename({
-        artifact_id: payloadArtifactId,
-        media_type: read.response.media_type || artifact.media_type,
-        format: artifact.format,
-        payload_kind: artifact.payload_kind,
-      });
       const preview = createArtifactBodyPreview(read);
-      await downloadLifecycle.enqueue(preview.objectUrl, filename);
+      await startBrowserDownload(
+        preview.objectUrl,
+        buildIoArtifactDownloadFilename({
+          artifact_id: payloadArtifactId,
+          media_type: read.response.media_type || artifact.media_type,
+          format: artifact.format,
+          payload_kind: artifact.payload_kind,
+        }),
+      );
     } catch (error) {
       if (isCurrent()) setArtifactAccessError(artifact.artifact_id, formatWorkflowCommandError(error));
     } finally {
       if (isCurrent()) setArtifactLoading(artifact.artifact_id, false);
     }
+  }
+
+  /**
+   * Hand an object URL to the browser as a download through the page's own
+   * declarative anchor, then let the download URL owner revoke it after the
+   * delay (or at once when the page is gone).
+   */
+  async function startBrowserDownload(objectUrl: string, filename: string): Promise<void> {
+    if (!pageLive) {
+      downloadUrls.release(objectUrl);
+      return;
+    }
+    downloadLink = { url: objectUrl, filename };
+    await tick();
+    downloadAnchor?.click();
+    downloadLink = null;
+    downloadUrls.release(objectUrl);
   }
 
   async function acknowledgeArtifactConsumed(artifact: IoArtifactProjectionRecord): Promise<void> {
@@ -670,7 +654,7 @@
   }
 
   function isCurrentArtifactSelectionById(artifactId: string): boolean {
-    return selectedRows.some((row) => row.artifact?.artifact_id === artifactId);
+    return selectedEntry?.artifact.artifact_id === artifactId;
   }
 
   function setArtifactLoading(artifactId: string, loading: boolean): void {
@@ -701,17 +685,27 @@
     return next;
   }
 
+  // Reload whenever the shared run or the Backend filter changes. The work
+  // itself is untracked so state read while refreshing never re-runs this.
   $effect(() => {
     const runId = activeRunId();
     const backendFilterValue = selectedBackendFilter.trim();
-    if (runId) {
-      inspectingSavedGraphs = false;
-      savedGraphInspection = null;
-      void refreshInspector(runId, backendFilterValue);
-    } else if (!inspectingSavedGraphs) {
-      inspectingSavedGraphs = true;
-      void refreshSavedGraphInspectionMode(null);
-    }
+    untrack(() => {
+      if (runId !== inspectedRunId) {
+        inspectedRunId = runId;
+        selectedEntryKey = null;
+        collapsedNodes = {};
+      }
+      if (runId) {
+        supersedeSavedGraphInspection();
+        void refreshInspector(runId, backendFilterValue);
+      } else {
+        void refreshInspector(null);
+        if (savedInspectionOpen) {
+          void refreshSavedGraphInspectionMode();
+        }
+      }
+    });
   });
 
   onMount(() => {
@@ -729,6 +723,7 @@
           nextUnlisten();
           return;
         }
+        liveUpdatesError = null;
         projectionUnsubscribe = nextUnlisten;
       })
       .catch(recordSubscriptionError);
@@ -746,491 +741,811 @@
   });
 
   onDestroy(() => {
-    downloadLifecycle.dispose();
+    downloadUrls.dispose();
     revokeAllArtifactObjectUrls();
   });
 
-  function selectNode(nodeId: string): void {
-    if (selectedNodeId === nodeId) {
+  function selectEntry(entry: IoInspectorTreeEntry): void {
+    if (entry.key === effectiveEntryKey) {
       return;
     }
-    selectedNodeId = nodeId;
+    selectedEntryKey = entry.key;
     invalidatePendingArtifactAccess();
+  }
+
+  function toggleNode(nodeId: string): void {
+    collapsedNodes = { ...collapsedNodes, [nodeId]: !collapsedNodes[nodeId] };
+  }
+
+  function toggleSavedInspection(): void {
+    savedInspectionOpen = !savedInspectionOpen;
+    if (savedInspectionOpen && !activeRunId()) {
+      void refreshSavedGraphInspectionMode();
+    }
+  }
+
+  function readHintFor(entry: IoInspectorTreeEntry): string {
+    const family = buildIoArtifactRendererSummary(entry.artifact).family;
+    if (canReadIoArtifactBody(entry.artifact)) {
+      return family === 'image'
+        ? 'Read body loads the full image.'
+        : `Read body shows the first ${PREVIEW_LIMIT_LABEL}.`;
+    }
+    if (entry.artifact.stream_handle) {
+      return 'Read stream shows what has been written so far.';
+    }
+    return '';
   }
 </script>
 
-{#each pendingDownloads as request (request.id)}
-  <a
-    href={request.objectUrl}
-    download={request.filename}
-    rel="noopener noreferrer"
-    hidden
-    aria-label="Download artifact"
-    use:activateDownload={request}
-  ></a>
-{/each}
-
-<section class="flex h-full min-h-0 flex-col bg-neutral-950" data-testid="io-inspector-page">
-  <div class="flex shrink-0 items-center justify-between gap-4 border-b border-neutral-800 px-4 py-3">
-    <div class="min-w-0">
-      <h1 class="text-base font-semibold text-neutral-100">I/O Inspector</h1>
-      <div class="mt-1 truncate text-xs text-neutral-500">
-        {#if $activeWorkflowRun}
-          {$activeWorkflowRun.workflow_run_id}
-        {:else}
-          Select a workflow run in Scheduler to inspect node I/O
-        {/if}
-      </div>
-    </div>
-    <div class="flex shrink-0 items-center gap-2">
-      <button
-        type="button"
-        class="inline-flex items-center gap-2 rounded border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
-        onclick={() => focusSettingsSection('diagnostics_retention')}
-      >
-        <Settings size={14} aria-hidden="true" />
-        Retention Settings
-      </button>
-      <button
-        type="button"
-        class="inline-flex items-center gap-2 rounded border border-neutral-700 px-3 py-1.5 text-sm text-neutral-300 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
-        onclick={() => {
-          if (activeRunId()) {
-            void refreshInspector();
-          } else {
-            void refreshSavedGraphInspectionMode();
-          }
-        }}
-        disabled={loadingInspector}
-      >
-        <RefreshCw size={14} aria-hidden="true" class={loadingInspector ? 'animate-spin' : ''} />
-        Refresh
-      </button>
-    </div>
-  </div>
-
-  {#if inspectorError}
-    <div class="border-b border-red-900 bg-red-950/50 px-4 py-2 text-sm text-red-200">{inspectorError}</div>
-  {/if}
-
+<div class="pg-main h-full io" data-testid="io-inspector-page">
   {#if !$activeWorkflowRun}
-    <div class="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
-      <div class="flex shrink-0 flex-wrap items-end gap-3 border-b border-neutral-800 px-4 py-3">
-        <label class="min-w-[18rem] max-w-xl flex-1">
-          <span class="mb-2 block text-xs uppercase tracking-[0.18em] text-neutral-500">Saved Workflow</span>
-          <select
-            class="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-sm text-neutral-100 focus:border-cyan-500 focus:outline-none disabled:opacity-50"
-            value={selectedSavedWorkflowPath ?? ''}
-            disabled={loadingInspector || savedWorkflowOptions.length === 0}
-            onchange={(event) => {
-              const nextPath = (event.currentTarget as HTMLSelectElement).value || null;
-              selectedSavedWorkflowPath = nextPath;
-              selectedNodeId = null;
-              void refreshSavedGraphInspectionMode(nextPath);
-            }}
-          >
-            {#each savedWorkflowOptions as option (option.inspectionPath)}
-              <option value={option.inspectionPath}>{option.label}</option>
-            {/each}
-          </select>
-        </label>
-        <div class="text-xs text-neutral-500">
-          {savedWorkflowOptions.length} saved workflows with stable ids
-        </div>
-      </div>
-
-      {#if loadingInspector && !savedGraphModel}
-        <div class="flex min-h-0 items-center justify-center text-sm text-neutral-500">
-          Loading saved graph inspection
-        </div>
-      {:else if savedGraphModel}
-        <SavedGraphInspectionSnapshot
-          model={savedGraphModel}
-          {selectedNodeId}
-          onSelectNode={(nodeId) => {
-            selectNode(nodeId);
-          }}
+    <DimensionLine label={dimensionLabel} />
+    <div class="norun" class:norun-open={savedInspectionOpen}>
+      <div class="empty-slot">
+        <EmptyState
+          label="No run selected"
+          question="Whose inputs and outputs?"
+          sentence="The inspector shows what passed through each port of one run. Pick a run here, select it in the Scheduler, or paste a run id."
+          actionLabel="Pick a run"
+          onaction={() => openRunContextPicker()}
         />
-      {:else if savedWorkflows.length === 0}
-        <div class="flex min-h-0 items-center justify-center text-sm text-neutral-500">
-          No saved workflows are available for inspection.
-        </div>
-      {:else}
-        <div class="flex min-h-0 items-center justify-center text-sm text-neutral-500">
-          Saved workflows need backend-listed stable ids before inspection.
-        </div>
-      {/if}
-    </div>
-  {:else}
-    <div class="grid min-h-0 flex-1 grid-rows-[minmax(18rem,42%)_minmax(0,1fr)] overflow-hidden">
-      <section class="min-h-0 border-b border-neutral-800">
-        {#if loadingInspector && !runGraph}
-          <div class="flex h-full items-center justify-center text-sm text-neutral-500">Loading run snapshot</div>
-        {:else if !runGraph}
-          <div class="flex h-full items-center justify-center text-sm text-neutral-500">
-            No versioned graph captured for this run
+      </div>
+      <section class="pg-panel saved" class:saved-open={savedInspectionOpen} aria-label="Saved workflow inspection">
+        <button
+          type="button"
+          class="saved-toggle"
+          aria-expanded={savedInspectionOpen}
+          aria-controls="io-saved-body"
+          onclick={toggleSavedInspection}
+        >
+          <span class="chev" aria-hidden="true">{savedInspectionOpen ? '▾' : '▸'}</span>
+          <span class="saved-toggle-label">Inspect a saved workflow instead</span>
+          <span class="pg-small pg-muted">A saved graph and the engine's stale facts for it, without a run.</span>
+        </button>
+        {#if savedInspectionOpen}
+          <div id="io-saved-body" class="saved-body">
+            <div class="saved-bar">
+              <label class="pg-fl saved-select">
+                Saved workflow
+                <select
+                  class="pg-field"
+                  value={selectedSavedWorkflowPath ?? ''}
+                  disabled={loadingSavedGraph || savedWorkflowOptions.length === 0}
+                  onchange={(event) => {
+                    const nextPath = (event.currentTarget as HTMLSelectElement).value || null;
+                    selectedSavedWorkflowPath = nextPath;
+                    savedSelectedNodeId = null;
+                    void refreshSavedGraphInspectionMode(nextPath);
+                  }}
+                >
+                  {#each savedWorkflowOptions as option (option.inspectionPath)}
+                    <option value={option.inspectionPath}>{option.label}</option>
+                  {/each}
+                </select>
+              </label>
+              <span class="pg-small pg-muted">
+                {savedWorkflowOptions.length}
+                {savedWorkflowOptions.length === 1 ? 'saved workflow' : 'saved workflows'} with stable ids
+              </span>
+              <button
+                type="button"
+                class="pg-btn pg-btn-sm saved-refresh"
+                disabled={loadingSavedGraph}
+                onclick={() => void refreshSavedGraphInspectionMode()}
+              >
+                {loadingSavedGraph ? 'Loading' : 'Refresh'}
+              </button>
+            </div>
+            <div class="saved-graph">
+              {#if savedGraphError}
+                <div class="pad">
+                  <ErrorCard
+                    title="Could not inspect the saved workflow"
+                    explanation={savedGraphError}
+                    suggestion="check that the engine is running, then refresh."
+                    actionLabel="Refresh"
+                    onaction={() => void refreshSavedGraphInspectionMode()}
+                  />
+                </div>
+              {:else if loadingSavedGraph && !savedGraphModel}
+                <div class="pg-empty">Loading the saved graph.</div>
+              {:else if savedGraphModel}
+                <SavedGraphInspectionSnapshot
+                  model={savedGraphModel}
+                  selectedNodeId={savedSelectedNodeId}
+                  onSelectNode={(nodeId) => {
+                    savedSelectedNodeId = nodeId;
+                  }}
+                />
+              {:else if savedWorkflows.length === 0}
+                <div class="pg-empty">No saved workflows are available for inspection.</div>
+              {:else}
+                <div class="pg-empty">Saved workflows need backend-listed stable ids before inspection.</div>
+              {/if}
+            </div>
           </div>
-        {:else}
-          <RunGraphSnapshot
-            {runGraph}
-            {artifactSummaries}
-            {nodeStatuses}
-            compact
-            {selectedNodeId}
-            onSelectNode={(nodeId) => {
-              selectNode(nodeId);
-            }}
-          />
         {/if}
       </section>
+    </div>
+  {:else}
+    <div class="dimwrap" data-run-id={$activeWorkflowRun.workflow_run_id} title="Ctrl+C copies the run id">
+      <DimensionLine label={dimensionLabel} />
+    </div>
 
-      <section class="flex min-h-0 flex-col overflow-hidden">
-        <div class="shrink-0 border-b border-neutral-900 px-4 py-3">
-          <div class="flex flex-wrap items-end justify-between gap-3">
-            <div class="min-w-0">
-              <h2 class="text-sm font-semibold text-neutral-100">
-                {selectedNodeId ? `Node I/O: ${selectedNodeId}` : 'Node I/O'}
-              </h2>
-              <div class="mt-1 text-xs text-neutral-500">
-                {formatProjectionFreshness(projectionState)}
-                {#if summarizedArtifactCount > 0}
-                  · {summarizedArtifactCount} retained artifacts in run
-                {/if}
-              </div>
-            </div>
-            <div class="flex min-w-[14rem] items-end gap-2">
-              <label class="min-w-0 flex-1">
-                <span class="mb-2 block text-xs uppercase tracking-[0.18em] text-neutral-500">Backend</span>
+    <div class="split">
+      <section class="pg-panel pg-col tree-panel" aria-label="Nodes and ports">
+        <div class="pg-ptop">
+          <div class="toprow">
+            <label class="pg-sr-only" for="io-search">Search nodes and ports</label>
+            <input
+              id="io-search"
+              class="pg-field grow"
+              type="search"
+              placeholder="Search nodes and ports"
+              bind:value={search}
+            />
+            <button
+              type="button"
+              class="pg-tgl"
+              aria-expanded={filtersOpen}
+              aria-controls="io-filters"
+              onclick={() => (filtersOpen = !filtersOpen)}
+            >
+              Filters{#if appliedBackendFilter}<span class="pg-n">1</span>{/if}
+            </button>
+          </div>
+          <SegmentedControl label="Show" options={directionOptions} value={direction} onchange={(next) => (direction = next)} />
+          {#if filtersOpen}
+            <div id="io-filters" class="filters">
+              <label class="pg-fl">
+                Backend
                 <input
+                  class="pg-field pg-mono"
                   type="text"
+                  placeholder="All backends"
                   bind:value={selectedBackendFilter}
-                  placeholder="all"
-                  class="w-full rounded border border-neutral-700 bg-neutral-900 px-3 py-1.5 font-mono text-xs text-neutral-100 placeholder:text-neutral-600 focus:border-cyan-500 focus:outline-none"
                 />
               </label>
             </div>
-          </div>
-          {#if retentionSummary.length > 0}
-            <div class="mt-3 flex flex-wrap items-center gap-2 text-xs">
-              {#each retentionSummary as item (item.retention_state)}
-                <span class="inline-flex items-center gap-2 rounded border border-neutral-800 bg-neutral-950 px-2 py-1 text-neutral-300">
-                  <span>{formatIoArtifactRetentionStateLabel(item.retention_state)}</span>
-                  <span class="font-mono text-neutral-500">{item.artifact_count}</span>
-                </span>
-              {/each}
-            </div>
           {/if}
-          {#if selectedNodeId}
-            <div class="mt-3 flex flex-wrap gap-2 text-xs">
-              <span class="rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-neutral-300">
-                Outputs {selectedOutputRows.length}
-              </span>
-              <span class="rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-neutral-300">
-                Inputs {selectedInputRows.length}
-              </span>
+          {#if appliedBackendFilter || retentionSummary.length > 0}
+            <div class="chips" aria-label="Applied filters and retention">
+              {#if appliedBackendFilter}
+                <FilterChip label={`Backend ${appliedBackendFilter}`} onclear={() => (selectedBackendFilter = '')} />
+              {/if}
+              {#each retentionSummary as item (item.retention_state)}
+                <Chip>{formatIoArtifactRetentionStateLabel(item.retention_state)}<span class="pg-n">{item.artifact_count}</span></Chip>
+              {/each}
             </div>
           {/if}
         </div>
 
-        <div class="min-h-0 overflow-auto p-4">
-          {#if !selectedNodeId}
-            <div class="text-sm text-neutral-500">Select a node in the run snapshot to inspect retained I/O.</div>
+        <div class="pg-scroll">
+          {#if runInspectorError}
+            <div class="pad">
+              <ErrorCard
+                title="Could not load this run's inputs and outputs"
+                explanation={runInspectorError}
+                suggestion="check that the engine is running, then refresh."
+                actionLabel="Refresh"
+                onaction={() => void refreshInspector()}
+              />
+            </div>
+          {/if}
+          {#each graphFactCards as card (card.key)}
+            <div class="pad fact-pad">
+              <div class="fact">
+                <div><b class="fact-title">{card.title}</b> <span class="pg-small pg-muted">{card.code}</span></div>
+                <div class="pg-small fact-text">{card.explanation}</div>
+                {#if card.suggestion}<div class="pg-small pg-muted fact-hint">{card.suggestion}</div>{/if}
+              </div>
+            </div>
+          {/each}
+
+          {#if loadingInspector && tree.length === 0}
+            <div class="pg-empty">Loading this run's nodes and ports.</div>
+          {:else if tree.length === 0 && !runInspectorError}
+            <div class="pg-empty">No graph was captured for this run and nothing has been retained yet.</div>
+          {:else if visibleTree.length === 0 && tree.length > 0}
+            <div class="pg-empty">No node or port matches “{search.trim()}”.</div>
           {:else}
-            {#if selectedRunGraphDiagnostics.length > 0}
-              <section class="mb-4 rounded border border-orange-900/70 bg-orange-950/20 p-4">
-                <h3 class="text-sm font-semibold text-orange-100">Stale Graph Facts</h3>
-                <div class="mt-3 space-y-2">
-                  {#each selectedRunGraphDiagnostics as diagnostic (`${diagnostic.code}:${diagnostic.message}`)}
-                    <div class="rounded border border-neutral-800 bg-neutral-950 p-3 text-xs">
-                      <span
-                        class={`inline-flex rounded border px-2 py-0.5 text-[11px] ${runGraphStaleDiagnosticClass(diagnostic.severity) === 'error' ? 'border-orange-800 bg-orange-950 text-orange-100' : runGraphStaleDiagnosticClass(diagnostic.severity) === 'warning' ? 'border-yellow-800 bg-yellow-950 text-yellow-100' : 'border-cyan-800 bg-cyan-950 text-cyan-100'}`}
-                      >
-                        {diagnostic.code}
-                      </span>
-                      <div class="mt-2 text-neutral-300">{diagnostic.message}</div>
-                    </div>
-                  {/each}
-                </div>
-              </section>
-            {/if}
-            {#if selectedRows.length === 0}
-              <div class="text-sm text-neutral-500">No retained artifact metadata for the selected node.</div>
-            {:else}
-            <div class="grid gap-3 xl:grid-cols-2 2xl:grid-cols-3">
-              {#each selectedRows as row (`${row.nodeIo.direction}:${row.nodeIo.node_id}:${row.nodeIo.port_id}:${row.artifact.event_id}`)}
-                {@const artifact = row.artifact}
-                {@const renderer = buildIoArtifactRendererSummary(artifact)}
-                {@const descriptorRows = buildIoArtifactDescriptorMetadataRows(artifact)}
-                {@const bodyPreview = artifactBodyPreviews[artifact.artifact_id]}
-                <article
-                  class="rounded border border-neutral-800 bg-neutral-900/60 p-4"
-                  data-testid="io-artifact-card"
-                  data-artifact-id={artifact.artifact_id}
-                  data-artifact-media-family={renderer.family}
-                >
-                  <div class="flex items-start justify-between gap-3">
-                    <div class="min-w-0">
-                      <div class="truncate font-mono text-xs text-neutral-100" title={artifact.artifact_id}>
-                        {artifact.artifact_id}
-                      </div>
-                      <div class="mt-1 text-xs text-neutral-500">
-                        {formatIoArtifactRoleLabel(artifact.artifact_role)} · {formatIoArtifactMediaLabel(
-                          artifact.media_type ?? artifact.format?.media_type,
-                          artifact.payload_kind,
-                        )}
-                      </div>
-                      <div class="mt-1 text-xs text-neutral-500">
-                        {formatResolvedNodeIoResolutionLabel(row.nodeIo.resolution)} · {formatResolvedNodeIoProvenance(row.nodeIo)}
-                      </div>
-                    </div>
-                    <span class="shrink-0 rounded border border-neutral-700 px-2 py-0.5 text-xs text-neutral-300">
-                      {formatIoArtifactAvailabilityLabel(artifact)}
+            <ul class="tree">
+              {#each visibleTree as node, index (node.nodeId)}
+                {@const open = !collapsedNodes[node.nodeId]}
+                {@const nodeFacts = buildStaleGraphFactCards(graphDiagnostics.byNodeId.get(node.nodeId) ?? [])}
+                <li>
+                  <button
+                    type="button"
+                    class="pg-item node"
+                    aria-expanded={open}
+                    aria-controls={`io-node-${index}`}
+                    onclick={() => toggleNode(node.nodeId)}
+                  >
+                    <StatusGlyph state={node.boundary ? 'idle' : glyphStateForStatus(node.status)} />
+                    <span class="min-w-0">
+                      <span class="pg-name">{formatIoInspectorNodeLabel(node)}</span>{#if node.nodeType}<span class="pg-ver">{node.nodeType}</span>{/if}
+                      <span class="pg-sub">{formatIoInspectorNodeSubLabel(node, nodeFacts.length)}</span>
                     </span>
-                  </div>
-
-                  <div class="mt-4 rounded border border-neutral-800 bg-neutral-950/70 px-3 py-3">
-                    <div class="flex items-center gap-2 text-sm text-neutral-100">
-                      {#if renderer.family === 'text'}
-                        <FileText size={16} aria-hidden="true" class="text-cyan-300" />
-                      {:else if renderer.family === 'image'}
-                        <ImageIcon size={16} aria-hidden="true" class="text-emerald-300" />
-                      {:else if renderer.family === 'audio'}
-                        <Music size={16} aria-hidden="true" class="text-amber-300" />
-                      {:else if renderer.family === 'video'}
-                        <Video size={16} aria-hidden="true" class="text-rose-300" />
-                      {:else if renderer.family === '3d'}
-                        <File size={16} aria-hidden="true" class="text-indigo-300" />
-                      {:else if renderer.family === 'table'}
-                        <Table2 size={16} aria-hidden="true" class="text-sky-300" />
-                      {:else if renderer.family === 'json'}
-                        <Braces size={16} aria-hidden="true" class="text-violet-300" />
-                      {:else if renderer.family === 'file'}
-                        <File size={16} aria-hidden="true" class="text-neutral-300" />
-                      {:else}
-                        <CircleHelp size={16} aria-hidden="true" class="text-neutral-400" />
-                      {/if}
-                      <span>{renderer.title}</span>
-                    </div>
-                    <div class="mt-2 text-xs text-neutral-500">{renderer.detail}</div>
-
-                    {#if bodyPreview}
-                      <div class="mt-3 overflow-hidden rounded border border-neutral-800 bg-neutral-900/80">
-                        {#if renderer.family === 'image'}
-                          {#key bodyPreview.objectUrl}
-                            <img
-                              src={bodyPreview.objectUrl}
-                              alt={`Preview of ${artifact.artifact_id}`}
-                              class="max-h-64 w-full object-contain"
-                              data-testid="io-artifact-image-preview"
-                              data-preview-complete={bodyPreview.complete}
-                              data-preview-byte-length={bodyPreview.byteLength}
-                              onerror={(event) =>
-                                handleArtifactImageError(
-                                  artifact.artifact_id,
-                                  (event.currentTarget as HTMLImageElement).src,
-                                )}
-                            />
-                          {/key}
-                        {:else if renderer.family === 'audio'}
-                          <audio
-                            src={bodyPreview.objectUrl}
-                            controls
-                            class="w-full"
-                            aria-label={`Audio preview of ${artifact.artifact_id}`}
-                          ></audio>
-                        {:else if renderer.family === 'video'}
-                          <!-- a11y-reviewed: arbitrary artifact preview has no caption-track association; disclose the limitation below rather than supplying a fictitious track. -->
-                          <!-- svelte-ignore a11y_media_has_caption -->
-                          <video
-                            src={bodyPreview.objectUrl}
-                            controls
-                            class="max-h-64 w-full bg-black"
-                            aria-label={`Video preview of ${artifact.artifact_id}`}
-                          ></video>
-                          {#if renderer.captionNotice}
-                            <p class="mt-2 text-xs text-neutral-400" data-testid="io-artifact-caption-notice">
-                              {renderer.captionNotice}
-                            </p>
-                          {/if}
-                        {:else if bodyPreview.text !== null && bodyPreview.text !== undefined}
-                          <pre
-                            class="max-h-72 overflow-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-xs leading-relaxed text-neutral-100"
-                          >{bodyPreview.text}</pre>
-                        {:else}
-                          <div class="px-3 py-2 text-xs text-neutral-400">
-                            Binary preview loaded. Use Download to inspect the retained body outside Pantograph.
-                          </div>
-                        {/if}
-                      </div>
-                      <div class="mt-2 text-xs text-neutral-500">
-                        {formatIoArtifactPreviewExtent(bodyPreview)}
-                        {#if bodyPreview.textTruncated}
-                          · text truncated
-                        {/if}
-                      </div>
-                    {/if}
-                  </div>
-
-                  <div class="mt-3 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      data-testid="io-artifact-read-button"
-                      class="inline-flex items-center gap-2 rounded border border-neutral-700 px-3 py-1.5 text-xs text-neutral-200 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
-                      onclick={() => {
-                        void readArtifactPreview(artifact);
-                      }}
-                      aria-label={`Read retained artifact ${artifact.artifact_id}`}
-                      disabled={!canReadIoArtifactBody(artifact) || artifactAccessLoading[artifact.artifact_id]}
-                    >
-                      <Eye size={14} aria-hidden="true" />
-                      {bodyPreview ? 'Refresh Read' : 'Read'}
-                    </button>
-                    <button
-                      type="button"
-                      class="inline-flex items-center gap-2 rounded border border-neutral-700 px-3 py-1.5 text-xs text-neutral-200 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
-                      onclick={() => {
-                        void readArtifactStreamPreview(artifact);
-                      }}
-                      aria-label={`Read artifact stream ${artifact.artifact_id}`}
-                      disabled={!artifact.stream_handle || artifactAccessLoading[artifact.artifact_id]}
-                    >
-                      <RefreshCw size={14} aria-hidden="true" />
-                      {bodyPreview ? 'Refresh Stream' : 'Read Stream'}
-                    </button>
-                    <button
-                      type="button"
-                      class="inline-flex items-center gap-2 rounded border border-neutral-700 px-3 py-1.5 text-xs text-neutral-200 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
-                      onclick={() => {
-                        void downloadArtifactBody(artifact);
-                      }}
-                      aria-label={`Download retained artifact ${artifact.artifact_id}`}
-                      disabled={!canReadIoArtifactBody(artifact) || artifactAccessLoading[artifact.artifact_id]}
-                    >
-                      <Download size={14} aria-hidden="true" />
-                      Download
-                    </button>
-                    <button
-                      type="button"
-                      class="inline-flex items-center gap-2 rounded border border-neutral-700 px-3 py-1.5 text-xs text-neutral-200 transition-colors hover:border-neutral-500 hover:text-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 disabled:opacity-50"
-                      onclick={() => {
-                        void acknowledgeArtifactConsumed(artifact);
-                      }}
-                      aria-label={`Acknowledge consume for artifact ${artifact.artifact_id}`}
-                      disabled={!canAcknowledgeIoArtifactConsumed(artifact) || artifactConsumeLoading[artifact.artifact_id]}
-                    >
-                      <Check size={14} aria-hidden="true" />
-                      {artifactConsumeLoading[artifact.artifact_id] ? 'Acknowledging' : 'Acknowledge'}
-                    </button>
-                  </div>
-
-                  {#if artifactAccessErrors[artifact.artifact_id]}
-                    <div
-                      class="mt-3 rounded border border-red-900 bg-red-950/50 px-3 py-2 text-xs text-red-200"
-                      data-testid="io-artifact-access-error"
-                    >
-                      {artifactAccessErrors[artifact.artifact_id]}
-                    </div>
-                  {/if}
-
-                  {#if artifactConsumeMessages[artifact.artifact_id]}
-                    <div class="mt-3 rounded border border-emerald-900 bg-emerald-950/40 px-3 py-2 text-xs text-emerald-200">
-                      {artifactConsumeMessages[artifact.artifact_id]}
-                    </div>
-                  {/if}
-
-                  <dl class="mt-4 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
-                    <div>
-                      <dt class="text-neutral-500">Size</dt>
-                      <dd class="mt-0.5 text-neutral-200">{formatIoArtifactBytes(artifact.size_bytes)}</dd>
-                    </div>
-                    <div>
-                      <dt class="text-neutral-500">Direction</dt>
-                      <dd class="mt-0.5 text-neutral-200">{formatResolvedNodeIoDirectionLabel(row.nodeIo.direction)}</dd>
-                    </div>
-                    <div>
-                      <dt class="text-neutral-500">Port</dt>
-                      <dd class="mt-0.5 truncate font-mono text-neutral-200" title={row.nodeIo.port_id}>
-                        {row.nodeIo.port_id}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt class="text-neutral-500">Producer</dt>
-                      <dd class="mt-0.5 truncate text-neutral-200" title={formatIoArtifactEndpointValue(artifact.producer_node_id, artifact.producer_port_id)}>
-                        {formatIoArtifactEndpointValue(artifact.producer_node_id, artifact.producer_port_id)}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt class="text-neutral-500">Consumer</dt>
-                      <dd class="mt-0.5 truncate text-neutral-200" title={formatIoArtifactEndpointValue(artifact.consumer_node_id, artifact.consumer_port_id)}>
-                        {formatIoArtifactEndpointValue(artifact.consumer_node_id, artifact.consumer_port_id)}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt class="text-neutral-500">Observed</dt>
-                      <dd class="mt-0.5 text-neutral-200">{formatTimestamp(artifact.occurred_at_ms)}</dd>
-                    </div>
-                    <div>
-                      <dt class="text-neutral-500">Backend</dt>
-                      <dd class="mt-0.5 truncate text-neutral-200" title={artifact.selected_backend_key ?? ''}>
-                        {formatIoArtifactDetailValue(artifact.selected_backend_key)}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt class="text-neutral-500">Model</dt>
-                      <dd class="mt-0.5 truncate text-neutral-200" title={artifact.model_id ?? ''}>
-                        {formatIoArtifactDetailValue(artifact.model_id)}
-                      </dd>
-                    </div>
-                    <div class="col-span-2">
-                      <dt class="text-neutral-500">Provenance</dt>
-                      <dd class="mt-0.5 truncate text-neutral-200" title={formatResolvedNodeIoProvenance(row.nodeIo)}>
-                        {formatResolvedNodeIoProvenance(row.nodeIo)}
-                      </dd>
-                    </div>
-                    <div class="col-span-2">
-                      <dt class="text-neutral-500">Payload Ref</dt>
-                      <dd class="mt-0.5 truncate font-mono text-neutral-200" title={artifact.payload_ref ?? ''}>
-                        {formatIoArtifactDetailValue(artifact.payload_ref)}
-                      </dd>
-                    </div>
-                  </dl>
-
-                  <section class="mt-4 rounded border border-neutral-800 bg-neutral-950/50 p-3">
-                    <h3 class="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">
-                      Artifact Descriptor
-                    </h3>
-                    <dl class="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
-                      {#each descriptorRows as row (row.label)}
-                        <div
-                          class={row.label.includes('Handle') ||
-                          row.label.includes('Version') ||
-                          row.label.includes('Command') ||
-                          row.label.includes('Dependency') ||
-                          row.label.includes('Lease')
-                            ? 'col-span-2'
-                            : ''}
+                    <span class="pg-time" aria-hidden="true">{open ? '▾' : '▸'}</span>
+                  </button>
+                  {#if open}
+                    <div id={`io-node-${index}`}>
+                      {#each node.entries as entry (entry.key)}
+                        <button
+                          type="button"
+                          class="art"
+                          aria-current={entry.key === effectiveEntryKey ? 'true' : undefined}
+                          data-testid="io-artifact-row"
+                          data-artifact-id={entry.artifact.artifact_id}
+                          onclick={() => selectEntry(entry)}
                         >
-                          <dt class="text-neutral-500">{row.label}</dt>
-                          <dd class={`mt-0.5 truncate text-neutral-200 ${row.mono ? 'font-mono' : ''}`} title={row.value}>
-                            {row.value}
-                          </dd>
+                          <span class="p">
+                            <span aria-hidden="true">{formatIoInspectorDirectionMark(entry.direction)}</span>
+                            <span class="pg-sr-only">{formatResolvedNodeIoDirectionLabel(entry.direction)}</span>
+                            {entry.portId}
+                          </span>
+                          <span class="s">{formatIoArtifactBytes(entry.artifact.size_bytes)}</span>
+                          <span class="d">{formatIoInspectorEntryDetail(entry.artifact)}</span>
+                        </button>
+                      {/each}
+                      {#each nodeFacts as card (card.key)}
+                        <div class="node-fact">
+                          <div class="fact">
+                            <div><b class="fact-title">{card.title}</b></div>
+                            <div class="pg-small pg-muted">{card.code}</div>
+                            <div class="pg-small fact-text">{card.explanation}</div>
+                            {#if card.suggestion}<div class="pg-small pg-muted fact-hint">{card.suggestion}</div>{/if}
+                          </div>
                         </div>
                       {/each}
-                    </dl>
-                  </section>
-
-                  {#if artifact.content_hash}
-                    <div class="mt-3 truncate font-mono text-[11px] text-neutral-500" title={artifact.content_hash}>
-                      {artifact.content_hash}
                     </div>
                   {/if}
-                </article>
+                </li>
               {/each}
+            </ul>
+          {/if}
+        </div>
+
+        <div class="pg-pfoot">
+          <button
+            type="button"
+            data-testid="io-inspector-refresh"
+            class="pg-btn pg-btn-sm"
+            disabled={loadingInspector}
+            title={liveUpdatesError ? `Live updates are off: ${liveUpdatesError}` : 'Query the run inspection projection again'}
+            onclick={() => void refreshInspector()}
+          >
+            {loadingInspector ? 'Loading' : 'Refresh'}
+          </button>
+          <span class="grow"></span>
+          <button type="button" class="pg-btn pg-btn-sm" onclick={() => focusSettingsSection('diagnostics_retention')}>
+            Retention settings
+          </button>
+        </div>
+      </section>
+
+      <section class="pg-panel pg-col detail-panel" aria-label="Artifact">
+        <div class="pg-scroll">
+          {#if selectedEntry}
+            {@const entry = selectedEntry}
+            {@const artifact = entry.artifact}
+            {@const renderer = buildIoArtifactRendererSummary(artifact)}
+            {@const bodyPreview = artifactBodyPreviews[artifact.artifact_id]}
+            {@const previewMode = resolveIoArtifactPreviewMode(renderer.family, bodyPreview)}
+            {@const sections = buildIoArtifactDetailSections(entry, formatTimestamp)}
+            {@const readBlocked = describeIoArtifactReadUnavailable(artifact)}
+            {@const streamBlocked = describeIoArtifactStreamUnavailable(artifact)}
+            {@const ackBlocked = describeIoArtifactAcknowledgeUnavailable(artifact)}
+            {@const accessBusy = Boolean(artifactAccessLoading[artifact.artifact_id])}
+            {@const nodeLabel = formatIoInspectorNodeLabel({ nodeId: entry.nodeId, boundary: entry.nodeId === IO_INSPECTOR_BOUNDARY_NODE_ID })}
+            <div
+              data-testid="io-artifact-card"
+              data-artifact-id={artifact.artifact_id}
+              data-artifact-media-family={renderer.family}
+            >
+              <div class="head">
+                <div class="head-text">
+                  <h2 class="pg-title art-title">{nodeLabel}<span class="pg-muted colon">:</span>{entry.portId}</h2>
+                  <div class="pg-mono pg-muted art-id" title={artifact.artifact_id}>{artifact.artifact_id}</div>
+                  <div class="chips">
+                    {#each buildIoArtifactChipLabels(artifact) as label (label)}
+                      <Chip>{label}</Chip>
+                    {/each}
+                  </div>
+                </div>
+                <div class="actions">
+                  <button
+                    type="button"
+                    class="pg-btn"
+                    data-testid="io-artifact-read-button"
+                    disabled={!canReadIoArtifactBody(artifact) || accessBusy}
+                    title={readBlocked ?? `Read the body (images in full, other media up to ${PREVIEW_LIMIT_LABEL})`}
+                    onclick={() => void readArtifactPreview(artifact)}
+                  >
+                    {bodyPreview ? 'Refresh read' : 'Read body'}
+                  </button>
+                  <button
+                    type="button"
+                    class="pg-btn"
+                    data-testid="io-artifact-stream-button"
+                    disabled={!artifact.stream_handle || accessBusy}
+                    title={streamBlocked ?? `Read up to ${PREVIEW_LIMIT_LABEL} of what the stream has written`}
+                    onclick={() => void readArtifactStreamPreview(artifact)}
+                  >
+                    {bodyPreview && artifact.stream_handle ? 'Refresh stream' : 'Read stream'}
+                  </button>
+                  <button
+                    type="button"
+                    class="pg-btn"
+                    data-testid="io-artifact-download-button"
+                    disabled={!canReadIoArtifactBody(artifact) || accessBusy}
+                    title={readBlocked ?? 'Download the full body'}
+                    onclick={() => void downloadArtifactBody(artifact)}
+                  >
+                    Download
+                  </button>
+                  <button
+                    type="button"
+                    class="pg-btn"
+                    data-testid="io-artifact-acknowledge-button"
+                    disabled={!canAcknowledgeIoArtifactConsumed(artifact) || artifactConsumeLoading[artifact.artifact_id]}
+                    title={ackBlocked ?? 'Tell the engine this GUI has consumed the payload'}
+                    onclick={() => void acknowledgeArtifactConsumed(artifact)}
+                  >
+                    {artifactConsumeLoading[artifact.artifact_id] ? 'Acknowledging' : 'Acknowledge'}
+                  </button>
+                </div>
+              </div>
+
+              {#if artifactAccessErrors[artifact.artifact_id]}
+                <div class="pad-x" data-testid="io-artifact-access-error">
+                  <ErrorCard
+                    title="Could not use this artifact's body"
+                    explanation={artifactAccessErrors[artifact.artifact_id]}
+                    suggestion="refresh the inspector; if the payload has expired, only its metadata remains."
+                    actionLabel="Refresh"
+                    onaction={() => void refreshInspector()}
+                  />
+                </div>
+              {/if}
+              {#if artifactConsumeMessages[artifact.artifact_id]}
+                <div class="pad-x pg-small pg-muted" role="status">{artifactConsumeMessages[artifact.artifact_id]}</div>
+              {/if}
+
+              <div class="preview-wrap">
+                {#if bodyPreview && previewMode === 'image'}
+                  <div class="prev">
+                    {#key bodyPreview.objectUrl}
+                      <img
+                        src={bodyPreview.objectUrl}
+                        alt={`Preview of ${artifact.artifact_id}`}
+                        class="prev-img"
+                        data-testid="io-artifact-image-preview"
+                        data-preview-complete={bodyPreview.complete}
+                        data-preview-byte-length={bodyPreview.byteLength}
+                        onerror={(event) =>
+                          handleArtifactImageError(artifact.artifact_id, (event.currentTarget as HTMLImageElement).src)}
+                      />
+                    {/key}
+                    <span class="cap">{formatIoArtifactPreviewExtent(bodyPreview)}, full body loaded</span>
+                  </div>
+                {:else if bodyPreview && previewMode === 'audio'}
+                  <div class="prev prev-pad">
+                    <audio src={bodyPreview.objectUrl} controls class="w-full" aria-label={`Audio preview of ${artifact.artifact_id}`}></audio>
+                  </div>
+                  <div class="pg-small pg-muted note">{formatIoArtifactPreviewExtent(bodyPreview)}</div>
+                {:else if bodyPreview && previewMode === 'text'}
+                  <pre class="pg-code text-prev">{bodyPreview.text}</pre>
+                  <div class="pg-small pg-muted note">
+                    {formatIoArtifactPreviewExtent(bodyPreview)}{#if bodyPreview.textTruncated} · text truncated{/if}
+                  </div>
+                {:else if bodyPreview}
+                  <div class="prev prev-meta">
+                    <div>Binary preview loaded. Use Download to inspect the retained body outside Pantograph.</div>
+                    <div class="pg-small pg-muted">{formatIoArtifactPreviewExtent(bodyPreview)}</div>
+                  </div>
+                {:else if readBlocked && streamBlocked}
+                  <div class="prev prev-meta">
+                    <div>Only metadata was kept for this port.</div>
+                    <div class="pg-small pg-muted">{artifact.retention_reason?.trim() || readBlocked}</div>
+                  </div>
+                {:else}
+                  <div class="prev prev-meta">
+                    <div>{renderer.title}, not read yet.</div>
+                    <div class="pg-small pg-muted">{readHintFor(entry)}</div>
+                  </div>
+                {/if}
+              </div>
+
+              <div class="secs">
+                <div class="pg-sec sec-a">
+                  <h3>Where it came from</h3>
+                  <KeyValue rows={sections.origin} />
+                </div>
+                <div class="pg-sec sec-b">
+                  <h3>How it was made</h3>
+                  <KeyValue rows={sections.making} />
+                </div>
+              </div>
+              <div class="pg-sec">
+                <h3>Storage</h3>
+                <KeyValue rows={sections.storage} />
+              </div>
             </div>
-            {/if}
+          {:else}
+            <div class="pg-empty">
+              {tree.some((node) => node.entries.length > 0)
+                ? 'Pick a port on the left to see what passed through it.'
+                : 'Nothing has been retained for this run yet. Ports appear here as nodes finish.'}
+            </div>
           {/if}
         </div>
       </section>
     </div>
   {/if}
-</section>
+
+  {#if downloadLink}
+    <a class="pg-sr-only" href={downloadLink.url} download={downloadLink.filename} rel="noopener noreferrer" tabindex="-1" aria-hidden="true" bind:this={downloadAnchor}>Download artifact body</a>
+  {/if}
+</div>
+
+<style>
+  .io {
+    overflow: hidden;
+  }
+
+  /* The question and the saved-workflow disclosure read as one group: centred
+     while the disclosure is closed, the saved graph takes the space when open. */
+  .norun {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 10px;
+  }
+
+  .empty-slot {
+    display: flex;
+    flex: 0 0 260px;
+    min-height: 0;
+  }
+
+  .norun-open .empty-slot {
+    flex-basis: 200px;
+  }
+
+  .saved {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .saved-open {
+    flex: 2 1 0;
+  }
+
+  .saved-toggle {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 14px;
+    border: 0;
+    background: var(--pg-panel-head);
+    color: var(--pg-text);
+    text-align: left;
+    cursor: pointer;
+    flex: none;
+  }
+
+  .saved-toggle:hover {
+    background: var(--pg-panel-raised);
+  }
+
+  .saved-toggle-label {
+    font-weight: 700;
+    color: var(--pg-text-bright);
+  }
+
+  .chev {
+    font-size: 10px;
+    color: var(--pg-border-strong);
+  }
+
+  .saved-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid var(--pg-border);
+  }
+
+  .saved-bar {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--pg-border);
+    flex: none;
+  }
+
+  .saved-select {
+    flex: 0 1 360px;
+    min-width: 220px;
+  }
+
+  .saved-refresh {
+    margin-left: auto;
+  }
+
+  .saved-graph {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .dimwrap {
+    flex: none;
+  }
+
+  .split {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    gap: 14px;
+    align-items: stretch;
+  }
+
+  .tree-panel {
+    flex: 0 0 340px;
+    min-height: 0;
+  }
+
+  .detail-panel {
+    flex: 1 1 0%;
+    min-height: 0;
+  }
+
+  .toprow {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .grow {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .filters {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .chips {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .pad {
+    padding: 10px 12px;
+  }
+
+  .fact-pad + .fact-pad {
+    padding-top: 0;
+  }
+
+  .pad-x {
+    padding: 0 18px 12px;
+  }
+
+  .tree {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .node {
+    align-items: center;
+  }
+
+  .node .pg-name {
+    font-family: var(--pg-font-mono);
+    font-size: 12.5px;
+  }
+
+  /* Port rows under a node (board `.art`). */
+  .art {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 2px 10px;
+    width: 100%;
+    padding: 8px 12px 8px 46px;
+    border: 0;
+    border-top: 1px solid var(--pg-border-soft);
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    color: var(--pg-text);
+    font-size: 13px;
+  }
+
+  .art:hover {
+    background: var(--pg-panel-raised);
+  }
+
+  .art[aria-current='true'] {
+    background: var(--pg-panel-selected);
+    box-shadow: inset 3px 0 0 var(--pg-text);
+  }
+
+  .art .p {
+    font-family: var(--pg-font-mono);
+    font-size: 12px;
+    color: var(--pg-text-bright);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .art .s {
+    font-family: var(--pg-font-mono);
+    font-size: 11px;
+    color: var(--pg-text-muted);
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .art .d {
+    grid-column: 1 / -1;
+    font-size: 12px;
+    color: var(--pg-text-muted);
+  }
+
+  .node-fact {
+    padding: 6px 12px 10px 46px;
+    border-top: 1px solid var(--pg-border-soft);
+  }
+
+  /* ErrorCard shape, muted: stale graph facts describe the captured graph. */
+  .fact {
+    padding: 8px 10px;
+    border: 1px solid var(--pg-border);
+    border-left: 3px solid var(--pg-border-strong);
+    border-radius: 4px;
+    background: var(--pg-panel-head);
+  }
+
+  .fact-title {
+    color: var(--pg-text-bright);
+  }
+
+  .fact-text {
+    margin-top: 2px;
+  }
+
+  .fact-hint {
+    margin-top: 4px;
+  }
+
+  .head {
+    padding: 16px 18px 12px;
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .head-text {
+    flex: 1 1 260px;
+    min-width: 0;
+  }
+
+  .art-title {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .colon {
+    font-size: 18px;
+  }
+
+  .art-id {
+    margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .head .chips {
+    margin-top: 10px;
+  }
+
+  .actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .preview-wrap {
+    padding: 0 18px 16px;
+  }
+
+  .prev {
+    border: 1px solid var(--pg-border);
+    border-radius: 4px;
+    background: var(--pg-panel-sunken);
+    min-height: 220px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .prev-img {
+    display: block;
+    max-width: 100%;
+    max-height: 360px;
+    object-fit: contain;
+  }
+
+  .prev-pad {
+    min-height: 0;
+    padding: 16px;
+  }
+
+  .prev-meta {
+    min-height: 120px;
+    flex-direction: column;
+    gap: 6px;
+    padding: 20px;
+    color: var(--pg-text-muted);
+    text-align: center;
+  }
+
+  .cap {
+    position: absolute;
+    left: 10px;
+    bottom: 8px;
+    font-family: var(--pg-font-mono);
+    font-size: 11px;
+    color: var(--pg-text-soft);
+    background: var(--pg-panel-sunken);
+    padding: 2px 6px;
+    border-radius: 3px;
+  }
+
+  .text-prev {
+    margin: 0;
+    max-height: 260px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .note {
+    margin-top: 6px;
+  }
+
+  .secs {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+    border-top: 1px solid var(--pg-border);
+  }
+
+  .secs .pg-sec {
+    border-top: 0;
+  }
+
+  .sec-b {
+    border-left: 1px solid var(--pg-border);
+  }
+</style>

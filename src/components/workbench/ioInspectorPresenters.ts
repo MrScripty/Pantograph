@@ -6,10 +6,15 @@ import type {
   IoArtifactPayloadKind,
   IoArtifactProjectionRecord,
   IoArtifactRetentionState,
+  NodeExecutionProjectionStatus,
+  NodeStatusProjectionRecord,
   ProjectionStateRecord,
+  ResolvedNodeIoDirection,
   ResolvedNodeIoRecord,
   WorkflowRetentionCleanupResult,
 } from '../../services/diagnostics/types';
+import type { GraphNode, WorkflowGraphDiagnostic } from '../../services/workflow/types';
+import type { KeyValueRow } from './ui/types';
 import { formatProjectionFreshnessState } from './projectionFreshness.ts';
 
 export type IoArtifactMediaFamily =
@@ -1032,4 +1037,666 @@ export function formatIoRetentionTimestamp(value: number | null | undefined): st
     return 'Unavailable';
   }
   return new Date(value).toLocaleString();
+}
+
+// ---------------------------------------------------------------------------
+// Node and port tree (I/O Inspector board, workbench redesign M3).
+//
+// The left panel lists the run snapshot's nodes, each expandable to the ports
+// that have retained-artifact metadata. Entries come from the backend-resolved
+// node I/O rows joined with the artifact projection; artifacts that no resolved
+// row references fall back to their own producer/consumer metadata so nothing
+// recorded for the run is hidden. Everything here is a pure projection of the
+// `workflow_run_inspection_query` response.
+// ---------------------------------------------------------------------------
+
+export type IoInspectorDirectionFilter = 'all' | ResolvedNodeIoDirection;
+
+export interface IoInspectorTreeEntry {
+  /** Stable row identity: direction, node, port and artifact. */
+  key: string;
+  nodeId: string;
+  portId: string;
+  direction: ResolvedNodeIoDirection;
+  artifact: IoArtifactProjectionRecord;
+  /** The backend-resolved row, or null when the entry came from artifact metadata alone. */
+  nodeIo: ResolvedNodeIoRecord | null;
+}
+
+export interface IoInspectorTreeNode {
+  /** Node id; for the workflow boundary group this is `IO_INSPECTOR_BOUNDARY_NODE_ID`. */
+  nodeId: string;
+  nodeType: string | null;
+  status: NodeExecutionProjectionStatus | null;
+  /** True for the synthetic group holding artifacts not attached to any node. */
+  boundary: boolean;
+  /** Inputs first, then outputs, in backend order within each direction. */
+  entries: IoInspectorTreeEntry[];
+}
+
+export interface IoInspectorTreeSource {
+  graphNodes: Pick<GraphNode, 'id' | 'node_type'>[];
+  nodeStatuses: Pick<NodeStatusProjectionRecord, 'node_id' | 'node_type' | 'status'>[];
+  resolvedNodeIo: ResolvedNodeIoRecord[];
+  artifacts: IoArtifactProjectionRecord[];
+}
+
+export interface IoInspectorDirectionCounts {
+  all: number;
+  input: number;
+  output: number;
+}
+
+export const IO_INSPECTOR_BOUNDARY_NODE_ID = '\u0000workflow-boundary';
+const UNRECORDED_PORT_LABEL = 'port not recorded';
+
+export function ioInspectorEntryKey(
+  direction: ResolvedNodeIoDirection,
+  nodeId: string,
+  portId: string,
+  artifactId: string,
+): string {
+  return [direction, nodeId, portId, artifactId].join('\u001f');
+}
+
+export function buildIoInspectorNodeTree(source: IoInspectorTreeSource): IoInspectorTreeNode[] {
+  const nodes = new Map<string, IoInspectorTreeNode>();
+  const ensureNode = (nodeId: string): IoInspectorTreeNode => {
+    let node = nodes.get(nodeId);
+    if (!node) {
+      const boundary = nodeId === IO_INSPECTOR_BOUNDARY_NODE_ID;
+      node = { nodeId, nodeType: null, status: null, boundary, entries: [] };
+      nodes.set(nodeId, node);
+    }
+    return node;
+  };
+
+  for (const graphNode of source.graphNodes) {
+    ensureNode(graphNode.id).nodeType = graphNode.node_type || null;
+  }
+  for (const status of source.nodeStatuses) {
+    const node = ensureNode(status.node_id);
+    node.status = status.status;
+    node.nodeType ??= status.node_type ?? null;
+  }
+
+  const seenKeys = new Set<string>();
+  const referencedArtifactIds = new Set<string>();
+  const addEntry = (entry: Omit<IoInspectorTreeEntry, 'key'>): void => {
+    const key = ioInspectorEntryKey(entry.direction, entry.nodeId, entry.portId, entry.artifact.artifact_id);
+    if (seenKeys.has(key)) {
+      return;
+    }
+    seenKeys.add(key);
+    const node = ensureNode(entry.nodeId);
+    if (!node.nodeType && entry.artifact.node_id === entry.nodeId && entry.artifact.node_type) {
+      node.nodeType = entry.artifact.node_type;
+    }
+    node.entries.push({ ...entry, key });
+  };
+
+  for (const row of buildResolvedNodeIoDisplayRows(source.resolvedNodeIo, source.artifacts)) {
+    if (!row.artifact || !isNormalResolvedNodeIoDisplayRow(row)) {
+      continue;
+    }
+    referencedArtifactIds.add(row.artifact.artifact_id);
+    addEntry({
+      nodeId: row.nodeIo.node_id,
+      portId: row.nodeIo.port_id,
+      direction: row.nodeIo.direction,
+      artifact: row.artifact,
+      nodeIo: row.nodeIo,
+    });
+  }
+
+  for (const artifact of source.artifacts) {
+    if (referencedArtifactIds.has(artifact.artifact_id) || isDiagnosticArtifact(artifact)) {
+      continue;
+    }
+    for (const entry of entriesFromArtifactMetadata(artifact)) {
+      addEntry(entry);
+    }
+  }
+
+  const ordered = [...nodes.values()].map((node) => ({
+    ...node,
+    entries: [
+      ...node.entries.filter((entry) => entry.direction === 'input'),
+      ...node.entries.filter((entry) => entry.direction === 'output'),
+    ],
+  }));
+  // The boundary group only exists when an artifact needed it; keep it last.
+  return [...ordered.filter((node) => !node.boundary), ...ordered.filter((node) => node.boundary)];
+}
+
+function isDiagnosticArtifact(artifact: IoArtifactProjectionRecord): boolean {
+  return [artifact.producer_port_id, artifact.consumer_port_id].some(isDiagnosticDataPort);
+}
+
+function entriesFromArtifactMetadata(
+  artifact: IoArtifactProjectionRecord,
+): Omit<IoInspectorTreeEntry, 'key'>[] {
+  const entries: Omit<IoInspectorTreeEntry, 'key'>[] = [];
+  const producer = normalizeArtifactIdentity(artifact.producer_node_id);
+  const consumer = normalizeArtifactIdentity(artifact.consumer_node_id);
+  if (producer) {
+    entries.push({
+      nodeId: producer,
+      portId: normalizeArtifactIdentity(artifact.producer_port_id) ?? UNRECORDED_PORT_LABEL,
+      direction: 'output',
+      artifact,
+      nodeIo: null,
+    });
+  }
+  if (consumer) {
+    entries.push({
+      nodeId: consumer,
+      portId: normalizeArtifactIdentity(artifact.consumer_port_id) ?? UNRECORDED_PORT_LABEL,
+      direction: 'input',
+      artifact,
+      nodeIo: null,
+    });
+  }
+  if (entries.length > 0) {
+    return entries;
+  }
+  const direction: ResolvedNodeIoDirection = artifact.artifact_role.includes('input') ? 'input' : 'output';
+  return [
+    {
+      nodeId: normalizeArtifactIdentity(artifact.node_id) ?? IO_INSPECTOR_BOUNDARY_NODE_ID,
+      portId: UNRECORDED_PORT_LABEL,
+      direction,
+      artifact,
+      nodeIo: null,
+    },
+  ];
+}
+
+/**
+ * Narrow the tree to one direction and a search text. With no search text
+ * every node stays listed (a node with no matching ports still shows its
+ * status); with search text a node stays when its id or type matches (all its
+ * ports in the direction) or when one of its ports or artifact ids matches.
+ */
+export function filterIoInspectorNodeTree(
+  nodes: IoInspectorTreeNode[],
+  filter: { direction: IoInspectorDirectionFilter; search: string },
+): IoInspectorTreeNode[] {
+  const query = filter.search.trim().toLowerCase();
+  const inDirection = (entry: IoInspectorTreeEntry) =>
+    filter.direction === 'all' || entry.direction === filter.direction;
+  return nodes.flatMap((node) => {
+    const directional = node.entries.filter(inDirection);
+    if (!query) {
+      return [{ ...node, entries: directional }];
+    }
+    const nodeMatches = [formatIoInspectorNodeLabel(node), node.nodeType ?? '']
+      .some((value) => value.toLowerCase().includes(query));
+    const entries = nodeMatches
+      ? directional
+      : directional.filter((entry) =>
+          [entry.portId, entry.artifact.artifact_id].some((value) => value.toLowerCase().includes(query)),
+        );
+    return nodeMatches || entries.length > 0 ? [{ ...node, entries }] : [];
+  });
+}
+
+export function countIoInspectorEntriesByDirection(nodes: IoInspectorTreeNode[]): IoInspectorDirectionCounts {
+  const counts: IoInspectorDirectionCounts = { all: 0, input: 0, output: 0 };
+  for (const entry of nodes.flatMap((node) => node.entries)) {
+    counts.all += 1;
+    counts[entry.direction] += 1;
+  }
+  return counts;
+}
+
+export function findIoInspectorEntry(
+  nodes: IoInspectorTreeNode[],
+  key: string | null,
+): IoInspectorTreeEntry | null {
+  if (!key) {
+    return null;
+  }
+  for (const node of nodes) {
+    const entry = node.entries.find((candidate) => candidate.key === key);
+    if (entry) {
+      return entry;
+    }
+  }
+  return null;
+}
+
+/**
+ * Keep the chosen entry while it exists; otherwise open on the first image
+ * output (what most runs are inspected for), then the first output, then the
+ * first entry. Null when the run has no retained I/O.
+ */
+export function resolveIoInspectorSelectedEntryKey(
+  currentKey: string | null,
+  nodes: IoInspectorTreeNode[],
+): string | null {
+  if (findIoInspectorEntry(nodes, currentKey)) {
+    return currentKey;
+  }
+  const entries = nodes.flatMap((node) => node.entries);
+  const outputs = entries.filter((entry) => entry.direction === 'output');
+  const image = outputs.find(
+    (entry) =>
+      classifyIoArtifactMedia(resolveIoArtifactMediaType(entry.artifact), entry.artifact.payload_kind) === 'image',
+  );
+  return (image ?? outputs[0] ?? entries[0])?.key ?? null;
+}
+
+export function formatIoInspectorNodeLabel(node: Pick<IoInspectorTreeNode, 'nodeId' | 'boundary'>): string {
+  return node.boundary ? 'Workflow boundary' : node.nodeId;
+}
+
+export function formatIoInspectorNodeStatusLabel(status: NodeExecutionProjectionStatus | null): string {
+  switch (status) {
+    case 'queued':
+      return 'Queued';
+    case 'running':
+      return 'Running';
+    case 'waiting':
+      return 'Waiting';
+    case 'completed':
+      return 'Succeeded';
+    case 'failed':
+      return 'Failed';
+    case 'cancelled':
+      return 'Cancelled';
+    case null:
+      return 'No status recorded';
+  }
+}
+
+/** Second line of a node row, for example "Succeeded, 2 retained ports". */
+export function formatIoInspectorNodeSubLabel(
+  node: Pick<IoInspectorTreeNode, 'status' | 'boundary' | 'entries'>,
+  staleFactCount = 0,
+): string {
+  const parts: string[] = [];
+  if (!node.boundary) {
+    parts.push(formatIoInspectorNodeStatusLabel(node.status));
+  }
+  const ports = node.entries.length;
+  if (ports > 0) {
+    parts.push(`${ports} retained ${ports === 1 ? 'port' : 'ports'}`);
+  } else if (node.status === 'queued' || node.status === 'waiting') {
+    parts.push('not reached yet');
+  } else {
+    parts.push('no retained I/O');
+  }
+  if (staleFactCount > 0) {
+    parts.push(`${staleFactCount} stale graph ${staleFactCount === 1 ? 'fact' : 'facts'}`);
+  }
+  return parts.join(', ');
+}
+
+export function formatIoInspectorDirectionMark(direction: ResolvedNodeIoDirection): string {
+  return direction === 'input' ? '←' : '→';
+}
+
+/** Kind and retention of an entry, for example "Image, payload retained". */
+export function formatIoInspectorEntryDetail(
+  artifact: Pick<IoArtifactProjectionRecord, 'payload_kind' | 'media_type' | 'retention_state'> &
+    Partial<Pick<IoArtifactProjectionRecord, 'format' | 'lifecycle_state'>>,
+): string {
+  return `${formatIoInspectorKindLabel(artifact)}, ${formatIoInspectorRetentionLabel(artifact).toLowerCase()}`;
+}
+
+export function formatIoInspectorKindLabel(
+  artifact: Pick<IoArtifactProjectionRecord, 'payload_kind' | 'media_type'> &
+    Partial<Pick<IoArtifactProjectionRecord, 'format'>>,
+): string {
+  return artifact.payload_kind
+    ? formatIoArtifactPayloadKindLabel(artifact.payload_kind)
+    : formatIoArtifactMediaLabel(resolveIoArtifactMediaType(artifact));
+}
+
+/** Retention in words; a body still being written reads "Streaming". */
+export function formatIoInspectorRetentionLabel(
+  artifact: Pick<IoArtifactProjectionRecord, 'retention_state'> &
+    Partial<Pick<IoArtifactProjectionRecord, 'lifecycle_state'>>,
+): string {
+  if (artifact.lifecycle_state === 'streaming' || artifact.lifecycle_state === 'writing') {
+    return formatIoArtifactLifecycleStateLabel(artifact.lifecycle_state);
+  }
+  return formatIoArtifactRetentionStateLabel(artifact.retention_state);
+}
+
+/** Static chips under the artifact title: role, kind, retention, media and size. */
+export function buildIoArtifactChipLabels(artifact: IoArtifactProjectionRecord): string[] {
+  const media = resolveIoArtifactMediaType(artifact)?.trim() || 'media type unknown';
+  return [
+    formatIoArtifactRoleLabel(artifact.artifact_role),
+    formatIoInspectorKindLabel(artifact),
+    formatIoInspectorRetentionLabel(artifact),
+    `${media}, ${formatIoArtifactBytes(artifact.size_bytes)}`,
+  ];
+}
+
+/**
+ * Dimension line: "run_x, 5 nodes, 6 retained artifacts, 4.1 MiB of payloads
+ * kept", followed by the I/O projection freshness when given (ADR-014 asks
+ * pages backed by cursor read models to show it).
+ */
+export function buildIoInspectorDimensionLabel(input: {
+  runId: string;
+  nodeCount: number;
+  artifacts: Pick<IoArtifactProjectionRecord, 'retention_state' | 'size_bytes'>[];
+  freshness?: string | null;
+}): string {
+  const keptBytes = input.artifacts
+    .filter((artifact) => artifact.retention_state === 'retained')
+    .reduce((total, artifact) => total + (artifact.size_bytes ?? 0), 0);
+  const nodes = `${input.nodeCount} ${input.nodeCount === 1 ? 'node' : 'nodes'}`;
+  const artifacts = `${input.artifacts.length} retained ${input.artifacts.length === 1 ? 'artifact' : 'artifacts'}`;
+  const base = `${input.runId}, ${nodes}, ${artifacts}, ${formatIoArtifactBytes(keptBytes)} of payloads kept`;
+  const freshness = input.freshness?.trim();
+  return freshness ? `${base}, projection ${freshness.charAt(0).toLowerCase()}${freshness.slice(1)}` : base;
+}
+
+export interface IoInspectorBackendFilterResult {
+  artifacts: IoArtifactProjectionRecord[];
+  resolvedNodeIo: ResolvedNodeIoRecord[];
+}
+
+/**
+ * Apply the Backend filter: keep artifacts whose selected backend key equals
+ * the filter and the resolved rows that point at a kept artifact. An empty
+ * filter keeps everything.
+ */
+export function applyIoInspectorBackendFilter(
+  artifacts: IoArtifactProjectionRecord[],
+  resolvedNodeIo: ResolvedNodeIoRecord[],
+  backendKey: string,
+): IoInspectorBackendFilterResult {
+  const key = backendKey.trim();
+  if (key.length === 0) {
+    return { artifacts, resolvedNodeIo };
+  }
+  const kept = artifacts.filter((artifact) => artifact.selected_backend_key === key);
+  const ids = (field: 'artifact_fact_id' | 'payload_artifact_id' | 'artifact_id') =>
+    new Set(kept.map((artifact) => normalizeArtifactIdentity(artifact[field])).filter((id): id is string => id !== null));
+  const factIds = ids('artifact_fact_id');
+  const payloadIds = ids('payload_artifact_id');
+  const artifactIds = ids('artifact_id');
+  const has = (set: Set<string>, value: string | null | undefined) => {
+    const normalized = normalizeArtifactIdentity(value);
+    return normalized !== null && set.has(normalized);
+  };
+  return {
+    artifacts: kept,
+    resolvedNodeIo: resolvedNodeIo.filter(
+      (record) =>
+        has(factIds, record.artifact_fact_id) ||
+        has(payloadIds, record.payload_artifact_id) ||
+        has(artifactIds, record.artifact_id),
+    ),
+  };
+}
+
+export interface IoArtifactDetailSections {
+  origin: KeyValueRow[];
+  making: KeyValueRow[];
+  storage: KeyValueRow[];
+}
+
+const STORAGE_DESCRIPTOR_LABELS = new Set(['Payload Kind', 'Lifecycle', 'Access', 'Read Handle', 'Stream Handle']);
+
+/**
+ * The "Where it came from", "How it was made" and "Storage" sections of the
+ * artifact detail. Descriptor rows keep their existing values; format and
+ * conversion rows go under "How it was made". `formatTimestamp` is injected so
+ * the caller owns locale formatting.
+ */
+export function buildIoArtifactDetailSections(
+  entry: Pick<IoInspectorTreeEntry, 'artifact' | 'nodeIo' | 'direction' | 'portId'>,
+  formatTimestamp: (ms: number) => string,
+): IoArtifactDetailSections {
+  const { artifact, nodeIo } = entry;
+  const origin: KeyValueRow[] = [
+    { key: 'Producer', value: formatIoArtifactEndpointValue(artifact.producer_node_id, artifact.producer_port_id), mono: true },
+    { key: 'Consumer', value: formatIoArtifactEndpointValue(artifact.consumer_node_id, artifact.consumer_port_id), mono: true },
+    { key: 'Direction', value: formatResolvedNodeIoDirectionLabel(entry.direction) },
+    { key: 'Observed', value: formatTimestamp(artifact.occurred_at_ms) },
+  ];
+  if (nodeIo) {
+    origin.push(
+      { key: 'Resolution', value: formatResolvedNodeIoResolutionLabel(nodeIo.resolution) },
+      { key: 'Provenance', value: formatResolvedNodeIoProvenance(nodeIo) },
+    );
+  } else {
+    origin.push({ key: 'Provenance', value: 'From artifact metadata; no resolved node I/O row' });
+  }
+
+  const making: KeyValueRow[] = [];
+  const storage: KeyValueRow[] = [];
+  for (const row of buildIoArtifactDescriptorMetadataRows(artifact)) {
+    const target = STORAGE_DESCRIPTOR_LABELS.has(row.label) ? storage : making;
+    target.push({ key: sentenceCaseLabel(row.label), value: row.value, mono: row.mono });
+  }
+  if (!making.some((row) => row.key === 'Backend')) {
+    making.unshift({ key: 'Backend', value: formatIoArtifactDetailValue(artifact.selected_backend_key), mono: true });
+  }
+  storage.push(
+    { key: 'Retention', value: formatIoArtifactRetentionStateLabel(artifact.retention_state) },
+    { key: 'Availability', value: formatIoArtifactAvailabilityLabel(artifact) },
+  );
+  if (artifact.retention_reason?.trim()) {
+    storage.push({ key: 'Retention reason', value: artifact.retention_reason.trim() });
+  }
+  storage.push(
+    { key: 'Size', value: formatIoArtifactBytes(artifact.size_bytes), mono: true },
+    { key: 'Payload ref', value: formatIoArtifactDetailValue(artifact.payload_ref), mono: true },
+    { key: 'Content hash', value: formatIoArtifactDetailValue(artifact.content_hash), mono: true },
+  );
+  return { origin, making, storage };
+}
+
+/** "Read Handle" → "Read handle"; all-caps words such as "CRF" stay as they are. */
+export function sentenceCaseLabel(label: string): string {
+  return label
+    .split(' ')
+    .map((word, index) => (index === 0 || /^[A-Z0-9]+$/.test(word) ? word : word.toLowerCase()))
+    .join(' ');
+}
+
+export type IoArtifactPreviewMode = 'none' | 'image' | 'audio' | 'text' | 'binary';
+
+/**
+ * How a loaded body renders. Images and audio play from the object URL; text,
+ * JSON and tables show the decoded bounded preview; everything else (video
+ * included, whose preview read is bounded to the first 64 KiB) gets the
+ * binary-body message pointing at Download.
+ */
+export function resolveIoArtifactPreviewMode(
+  family: IoArtifactMediaFamily,
+  preview: { text?: string | null } | null | undefined,
+): IoArtifactPreviewMode {
+  if (!preview) {
+    return 'none';
+  }
+  if (family === 'image') {
+    return 'image';
+  }
+  if (family === 'audio') {
+    return 'audio';
+  }
+  if (preview.text !== null && preview.text !== undefined) {
+    return 'text';
+  }
+  return 'binary';
+}
+
+/** Why Read body and Download are disabled, or null when they are available. */
+export function describeIoArtifactReadUnavailable(
+  artifact: Pick<IoArtifactProjectionRecord, 'retention_state'> &
+    Partial<Pick<IoArtifactProjectionRecord, 'read_handle' | 'access_modes' | 'lifecycle_state'>>,
+): string | null {
+  if (canReadIoArtifactBody(artifact)) {
+    return null;
+  }
+  if (artifact.retention_state !== 'retained') {
+    return `${formatIoArtifactRetentionStateLabel(artifact.retention_state)}, so there is no body to read.`;
+  }
+  if (artifact.lifecycle_state && artifact.lifecycle_state !== 'retained') {
+    return `The body is ${formatIoArtifactLifecycleStateLabel(artifact.lifecycle_state).toLowerCase()}; it can be read once it is retained.`;
+  }
+  return 'The engine did not grant read or download access to this body.';
+}
+
+export function describeIoArtifactStreamUnavailable(
+  artifact: Partial<Pick<IoArtifactProjectionRecord, 'stream_handle'>>,
+): string | null {
+  return artifact.stream_handle ? null : 'This body was not written as a stream.';
+}
+
+export function describeIoArtifactAcknowledgeUnavailable(
+  artifact: Pick<IoArtifactProjectionRecord, 'artifact_id' | 'retention_state'>,
+): string | null {
+  return canAcknowledgeIoArtifactConsumed(artifact)
+    ? null
+    : 'Only retained payloads can be acknowledged as consumed.';
+}
+
+export interface StaleGraphFactCard {
+  key: string;
+  title: string;
+  code: string;
+  explanation: string;
+  suggestion: string | null;
+}
+
+/**
+ * Muted, ErrorCard-shaped explanations of backend graph diagnostics ("stale
+ * graph facts"). They describe the captured graph, not a failure of this page,
+ * so they never use the danger colour.
+ */
+export function buildStaleGraphFactCards(diagnostics: WorkflowGraphDiagnostic[]): StaleGraphFactCard[] {
+  const seen = new Set<string>();
+  return diagnostics.flatMap((diagnostic) => {
+    const key = [diagnostic.scope, diagnostic.node_id ?? '', diagnostic.code, diagnostic.message].join('\u001f');
+    if (seen.has(key)) {
+      return [];
+    }
+    seen.add(key);
+    return [
+      {
+        key,
+        title: humanizeDiagnosticCode(diagnostic.code),
+        code: `${formatGraphDiagnosticSeverityLabel(diagnostic.severity)}, ${diagnostic.code}`,
+        explanation: diagnostic.message,
+        suggestion: diagnostic.blocking_submission
+          ? 'Try: open the workflow in Graph and fix this node before running it again.'
+          : null,
+      },
+    ];
+  });
+}
+
+export function formatGraphDiagnosticSeverityLabel(severity: WorkflowGraphDiagnostic['severity']): string {
+  switch (severity) {
+    case 'error':
+      return 'Error';
+    case 'warning':
+      return 'Warning';
+    case 'info':
+      return 'Note';
+  }
+}
+
+function humanizeDiagnosticCode(code: string): string {
+  const words = code.replaceAll('_', ' ').trim();
+  return words.length > 0 ? words.charAt(0).toUpperCase() + words.slice(1) : 'Graph fact';
+}
+
+/** Split graph diagnostics into graph-scope facts and facts per node id. */
+export function partitionGraphDiagnosticsByNode(diagnostics: WorkflowGraphDiagnostic[]): {
+  graph: WorkflowGraphDiagnostic[];
+  byNodeId: Map<string, WorkflowGraphDiagnostic[]>;
+} {
+  const graph: WorkflowGraphDiagnostic[] = [];
+  const byNodeId = new Map<string, WorkflowGraphDiagnostic[]>();
+  for (const diagnostic of diagnostics) {
+    const nodeId = normalizeArtifactIdentity(diagnostic.node_id);
+    if (!nodeId) {
+      graph.push(diagnostic);
+      continue;
+    }
+    byNodeId.set(nodeId, [...(byNodeId.get(nodeId) ?? []), diagnostic]);
+  }
+  return { graph, byNodeId };
+}
+
+export interface GraphCanvasViewBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+const FALLBACK_CANVAS_VIEWBOX: GraphCanvasViewBox = { x: 0, y: 0, width: 640, height: 360 };
+
+/**
+ * Read a canvas view box given either as the SVG string "x y w h" or as an
+ * object. Malformed input falls back to the empty-canvas box so the saved
+ * graph surface still lays out.
+ */
+export function parseGraphCanvasViewBox(viewBox: string | GraphCanvasViewBox | null | undefined): GraphCanvasViewBox {
+  if (viewBox && typeof viewBox === 'object') {
+    return viewBox;
+  }
+  const parts = (viewBox ?? '').trim().split(/[\s,]+/).map(Number);
+  if (parts.length !== 4 || parts.some((part) => !Number.isFinite(part)) || parts[2] <= 0 || parts[3] <= 0) {
+    return { ...FALLBACK_CANVAS_VIEWBOX };
+  }
+  const [x, y, width, height] = parts;
+  return { x, y, width, height };
+}
+
+export interface IoArtifactDownloadUrlOwner {
+  /** Revoke `objectUrl` after the delay; the owner keeps the timer. */
+  release: (objectUrl: string) => void;
+  /** Cancel pending timers and revoke every URL still held. */
+  dispose: () => void;
+  pendingCount: () => number;
+}
+
+/**
+ * One owner for the object URLs handed to the browser for downloads. Each URL
+ * is revoked after `delayMs` (the browser needs it alive while the download
+ * starts) or when the page is destroyed, whichever comes first.
+ */
+export function createIoArtifactDownloadUrlOwner(options: {
+  delayMs: number;
+  revoke: (objectUrl: string) => void;
+  schedule: (callback: () => void, delayMs: number) => number;
+  cancel: (handle: number) => void;
+}): IoArtifactDownloadUrlOwner {
+  const pending = new Map<number, string>();
+  let disposed = false;
+  return {
+    release(objectUrl) {
+      if (disposed) {
+        options.revoke(objectUrl);
+        return;
+      }
+      const handle = options.schedule(() => {
+        pending.delete(handle);
+        options.revoke(objectUrl);
+      }, options.delayMs);
+      pending.set(handle, objectUrl);
+    },
+    dispose() {
+      disposed = true;
+      for (const [handle, objectUrl] of pending) {
+        options.cancel(handle);
+        options.revoke(objectUrl);
+      }
+      pending.clear();
+    },
+    pendingCount: () => pending.size,
+  };
 }

@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Scheduler, dark drafting paper with inbox</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&amp;family=Atkinson+Hyperlegible:wght@400;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#2A2E35;color:#E4E6EA;font-family:'Atkinson Hyperlegible',system-ui,sans-serif;font-size:14px;line-height:1.45}
+a{color:#E4E6EA}a:hover{color:#fff}
+*,*::before,*::after{box-sizing:border-box}
+button,input,select{font:inherit;color:inherit}
+*{scrollbar-width:thin;scrollbar-color:#5A6069 transparent}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#5A6069;border-radius:5px;border:2px solid #33383F}
+::-webkit-scrollbar-thumb:hover{background:#7A818C}
+::-webkit-scrollbar-corner{background:transparent}
+.serif{font-family:Newsreader,Georgia,serif}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12.5px}
+.muted{color:#A3A9B4}
+.tab{display:flex;align-items:center;height:40px;padding:0 12px;text-decoration:none;color:#B8BDC6;border-bottom:2px solid transparent;font-size:13.5px}
+.tab:hover{color:#fff;background:rgba(255,255,255,.04)}
+.tab[aria-current="page"]{color:#fff;border-bottom-color:var(--accent)}
+.dim{position:relative;flex:1;height:1px;background:#8A909A;align-self:center;margin: 0 6px}
+.dim::before,.dim::after{content:"";position:absolute;top:-5px;width:1px;height:11px;background:#8A909A}
+.dim::before{left:0}.dim::after{right:0}
+.dim-label{position:absolute;left:50%;top:-9px;transform:translateX(-50%);padding:0 12px;background:#2A2E35;font-family:'JetBrains Mono',monospace;font-size:12px;color:#C9CDD4;white-space:nowrap}
+.field{height:32px;padding:0 10px;border:1px solid #4A5059;border-radius:4px;background:#23272D;color:#E4E6EA}
+.field:focus{outline:2px solid var(--accent);outline-offset:1px}
+.seg{display:flex;flex-wrap:wrap;border:1px solid #4A5059;border-radius:4px;overflow:hidden;background:#23272D}
+.seg button{height:30px;padding:0 7px;border:0;background:transparent;cursor:pointer;display:flex;gap:4px;align-items:center;color:#B8BDC6;font-size:12.5px;white-space:nowrap;min-width:0}
+.seg button+button{border-left:1px solid #3B4048}
+.seg button:hover{background:#33383F;color:#fff}
+.seg button[aria-pressed="true"]{background:#E4E6EA;color:#1F2227}
+.seg .n{font-family:'JetBrains Mono',monospace;font-size:11px;opacity:.8}
+.btn{height:32px;padding:0 12px;border:1px solid #4A5059;border-radius:4px;background:#33383F;cursor:pointer;display:inline-flex;align-items:center;gap:6px;color:#E4E6EA}
+.btn:hover{border-color:#8A909A}
+.btn:focus-visible,.seg button:focus-visible,.item:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.panel{background:#33383F;border:1px solid #4A5059;border-radius:4px}
+.lane{display:grid;grid-template-columns:96px 1fr;gap:8px;align-items:center}
+.lane-name{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#C9CDD4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lane-track{display:flex;gap:3px;height:18px}
+.blk{display:flex;align-items:center;padding:0 6px;border-radius:2px;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;border:1px solid transparent}
+.blk-running{background:var(--accent);color:#1F2227;font-weight:700}
+.blk-waiting{border-color:var(--accent);color:#E4E6EA;background:repeating-linear-gradient(135deg,transparent 0 4px,rgba(217,176,106,.25) 4px 6px)}
+.blk-queued{border-color:#6B717B;color:#C9CDD4}
+.item{display:grid;grid-template-columns:14px 1fr auto;gap:10px;align-items:start;width:100%;padding:9px 12px;border:0;border-top:1px solid #3B4048;background:transparent;text-align:left;cursor:pointer;color:#E4E6EA}
+.item:hover{background:#3A3F47}
+.item[aria-selected="true"]{background:#3E444D;box-shadow:inset 3px 0 0 var(--accent)}
+.item .name{font-weight:700;color:#fff}
+.item .time{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#A3A9B4;padding-top:2px}
+.g{display:inline-block;width:10px;height:10px;border-radius:50%;border:1.5px solid #A3A9B4;margin-top:4px}
+.g-running{background:var(--accent);border-color:var(--accent)}
+.g-waiting{background:linear-gradient(90deg,var(--accent) 50%,transparent 50%);border-color:var(--accent)}
+.g-queued{background:transparent}
+.g-succeeded{background:#A3A9B4;border-color:#A3A9B4}
+.g-failed{background:#E39A9A;border-color:#E39A9A;border-radius:1px;transform:rotate(45deg) scale(.9)}
+.g-cancelled{border-style:dashed}
+.st-failed{color:#E39A9A}
+.sec{padding:14px 18px;border-top:1px solid #4A5059}
+.sec h3{margin:0 0 8px;font-size:13px;font-weight:700;color:#fff}
+.ev{display:grid;grid-template-columns:66px 1fr;gap:5px 14px;font-size:13.5px}
+.ev .t{font-family:'JetBrains Mono',monospace;font-size:12px;color:#A3A9B4}
+.notice{display:flex;gap:12px;align-items:center;padding:7px 12px;border:1px solid #4A5059;border-left:3px solid #8A909A;background:#23272D;border-radius:0 4px 4px 0;font-size:13px}
+.chip{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 8px;border:1px solid #4A5059;border-radius:11px;font-size:12px;background:#23272D}
+.chip .g{margin-top:0}
+</style>
+</helmet>
+<div style="--accent: {{accent}}; min-height: 100vh; display: flex; flex-direction: column; background: #2A2E35">
+
+  <header style="display: flex; align-items: center; gap: 4px; padding: 0 14px; border-bottom: 1px solid #1F2227; background: #23272D; flex-wrap: wrap">
+    <div class="serif" style="font-size: 18px; font-weight: 500; padding-right: 14px; letter-spacing: -0.01em">Pantograph</div>
+    <nav aria-label="Workspaces" style="display: flex; flex-wrap: wrap">
+      <a class="tab" href="#scheduler" aria-current="page">Scheduler</a>
+      <a class="tab" href="#diagnostics">Diagnostics</a>
+      <a class="tab" href="#graph">Graph</a>
+      <a class="tab" href="#io">I/O Inspector</a>
+      <a class="tab" href="#library">Library</a>
+      <a class="tab" href="#network">Network</a>
+      <a class="tab" href="#nodes">Node Editor</a>
+      <a class="tab" href="#settings">Settings</a>
+    </nav>
+    <div style="flex: 1"></div>
+    <div class="muted" style="font-size: 12.5px; display: flex; align-items: center; gap: 8px"><span class="g g-succeeded" style="width:7px;height:7px;margin:0" aria-hidden="true"></span>Local engine, updated 20:05:51</div>
+    <a class="tab" href="#assistant" style="margin-left: 6px">Assistant</a>
+  </header>
+
+  <main style="flex: 1; padding: 16px 22px 24px; display: flex; flex-direction: column; gap: 12px; min-width: 0">
+    <div style="display: flex; align-items: center; padding: 10px 0 6px">
+      <div class="dim" role="presentation"><span class="dim-label">{{summary}}</span></div>
+    </div>
+
+    <sc-if value="{{engineOffline}}" hint-placeholder-val="{{ false }}">
+      <div class="notice" role="status">
+        <span>Engine unreachable since 20:03. Showing the last projection; runs keep executing on the engine.</span>
+        <button class="btn" type="button" style="height: 26px; margin-left: auto">Retry now</button>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{showLanes}}" hint-placeholder-val="{{ true }}">
+      <section aria-label="Device lanes" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 8px 22px; padding: 8px 12px; border: 1px solid #4A5059; border-radius: 4px; background: #2E333A">
+        <sc-for list="{{lanes}}" as="lane" hint-placeholder-count="3">
+          <div class="lane">
+            <div class="lane-name" title="{{lane.meta}}">{{lane.name}}</div>
+            <div class="lane-track">
+              <sc-for list="{{lane.blocks}}" as="b" hint-placeholder-count="2">
+                <div class="blk {{b.cls}}" style="flex: {{b.flex}} 1 0" title="{{b.title}}">{{b.label}}</div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+      </section>
+    </sc-if>
+
+    <div style="display: flex; gap: 14px; align-items: stretch; flex-wrap: wrap; flex: 1">
+
+      <section class="panel" aria-label="Runs" style="flex: 1 1 360px; max-width: 430px; min-width: 340px; display: flex; flex-direction: column; overflow: hidden">
+        <div style="padding: 10px 12px; display: flex; flex-direction: column; gap: 8px">
+          <div style="display: flex; gap: 8px">
+            <label for="d-search" style="position: absolute; left: -9999px">Search runs</label>
+            <input id="d-search" class="field" type="search" placeholder="Search runs" style="flex: 1; min-width: 0">
+            <button class="btn" type="button" onClick="{{toggleMore}}" aria-expanded="{{more}}">{{moreLabel}}</button>
+          </div>
+          <div class="seg" role="group" aria-label="Status">
+            <sc-for list="{{filters}}" as="f" hint-placeholder-count="5">
+              <button type="button" aria-pressed="{{f.active}}" onClick="{{f.pick}}" style="flex: 1; justify-content: center">{{f.label}} <span class="n">{{f.count}}</span></button>
+            </sc-for>
+          </div>
+          <sc-if value="{{more}}" hint-placeholder-val="{{ false }}">
+            <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 10px; padding: 10px; border: 1px dashed #4A5059; border-radius: 4px">
+              <label style="font-size: 12px" class="muted">Sort<select class="field" style="display:block;width:100%;margin-top:3px;height:28px"><option>Updated</option><option>Queued</option><option>Priority</option><option>Duration</option></select></label>
+              <label style="font-size: 12px" class="muted">Policy<select class="field" style="display:block;width:100%;margin-top:3px;height:28px"><option>All</option><option>fair-share</option><option>fifo</option></select></label>
+              <label style="font-size: 12px" class="muted">Retention<select class="field" style="display:block;width:100%;margin-top:3px;height:28px"><option>All</option><option>7 days</option><option>30 days</option></select></label>
+              <label style="font-size: 12px" class="muted">Client<select class="field" style="display:block;width:100%;margin-top:3px;height:28px"><option>All</option><option>gui</option><option>cli</option></select></label>
+              <label style="font-size: 12px" class="muted">Session<select class="field" style="display:block;width:100%;margin-top:3px;height:28px"><option>All</option></select></label>
+              <label style="font-size: 12px" class="muted">Bucket<select class="field" style="display:block;width:100%;margin-top:3px;height:28px"><option>All</option><option>default</option></select></label>
+              <label style="font-size: 12px" class="muted">Runtime<select class="field" style="display:block;width:100%;margin-top:3px;height:28px"><option>All</option><option>llama.cpp</option><option>diffusers</option><option>whisper</option></select></label>
+              <label style="font-size: 12px" class="muted">Backend<select class="field" style="display:block;width:100%;margin-top:3px;height:28px"><option>All</option><option>cuda</option><option>cpu</option></select></label>
+              <label style="font-size: 12px" class="muted">Device<select class="field" style="display:block;width:100%;margin-top:3px;height:28px"><option>All</option><option>cuda:0</option><option>cuda:1</option><option>cpu</option></select></label>
+              <label style="font-size: 12px" class="muted">Network node<select class="field" style="display:block;width:100%;margin-top:3px;height:28px"><option>All</option><option>local</option></select></label>
+              <label style="font-size: 12px" class="muted">Accepted<select class="field" style="display:block;width:100%;margin-top:3px;height:28px"><option>Any time</option><option>Today</option><option>This week</option></select></label>
+            </div>
+          </sc-if>
+        </div>
+        <div role="list" style="display: flex; flex-direction: column; flex: 1">
+          <sc-for list="{{runs}}" as="run" hint-placeholder-count="10">
+            <button class="item" type="button" role="listitem" aria-selected="{{run.selected}}" onClick="{{run.pick}}">
+              <span class="g {{run.glyph}}" aria-hidden="true"></span>
+              <span style="min-width: 0">
+                <span class="name">{{run.wf}}</span>
+                <span class="muted" style="display: block; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis"><span class="{{run.stClass}}">{{run.statusLabel}}</span>{{run.reasonSuffix}}</span>
+                <span class="muted" style="display: block; font-size: 12px">{{run.placement}}</span>
+              </span>
+              <span class="time">{{run.updated}}</span>
+            </button>
+          </sc-for>
+        </div>
+        <sc-if value="{{showListActions}}" hint-placeholder-val="{{ true }}">
+          <div style="padding: 10px 12px; border-top: 1px solid #4A5059; background: #2E333A; display: flex; flex-direction: column; gap: 8px">
+            <div class="muted" style="font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Selected: <span style="color: #E4E6EA; font-weight: 700">{{sel.wf}}</span></div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center">
+              <button class="btn" type="button" style="height: 28px">Cancel run</button>
+              <button class="btn" type="button" style="height: 28px">Move to front</button>
+              <label class="muted" style="font-size: 12.5px; display: flex; align-items: center; gap: 6px; margin-left: auto">Priority <input class="field" type="number" value="0" style="width: 56px; height: 28px"></label>
+            </div>
+          </div>
+        </sc-if>
+      </section>
+
+      <section class="panel" aria-label="Run detail" style="flex: 999 1 520px; min-width: 0">
+        <sc-if value="{{hasSel}}" hint-placeholder-val="{{ true }}">
+          <div style="padding: 18px 18px 14px; display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap">
+            <div style="flex: 1 1 260px; min-width: 0">
+              <div class="serif" style="font-size: 24px; font-weight: 500; letter-spacing: -0.01em">{{sel.wf}} <span class="muted" style="font-size: 16px">v{{sel.ver}}</span></div>
+              <div class="mono muted" style="margin-top: 2px">{{sel.id}}</div>
+              <div style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center">
+                <span class="chip"><span class="g {{sel.glyph}}" aria-hidden="true"></span>{{sel.statusLabel}}</span>
+                <span class="chip">{{sel.runtime}} on {{sel.device}}</span>
+                <span class="chip">priority {{sel.prio}}</span>
+                <span class="chip">queue {{sel.queue}}</span>
+              </div>
+            </div>
+            <sc-if value="{{showDetailActions}}" hint-placeholder-val="{{ false }}">
+              <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center">
+                <button class="btn" type="button" style="height: 30px">Cancel run</button>
+                <button class="btn" type="button" style="height: 30px">Move to front</button>
+                <label class="muted" style="font-size: 12.5px; display: flex; align-items: center; gap: 6px">Priority <input class="field" type="number" value="0" style="width: 58px; height: 30px"></label>
+              </div>
+            </sc-if>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); border-top: 1px solid #4A5059">
+            <div class="sec" style="border-top: 0">
+              <h3>Estimate</h3>
+              <div>{{sel.est}}</div>
+              <div class="muted" style="font-size: 12.5px">Based on 14 earlier runs of this version</div>
+            </div>
+            <div class="sec" style="border-top: 0; border-left: 1px solid #4A5059">
+              <h3>Retention</h3>
+              <div>Keep artifacts 7 days, 212 MB on disk</div>
+              <div class="muted" style="font-size: 12.5px">Expires 2026-11-09</div>
+            </div>
+            <div class="sec" style="border-top: 0; border-left: 1px solid #4A5059">
+              <h3>Placement</h3>
+              <div>{{sel.reasonOrPlaced}}</div>
+              <div class="muted" style="font-size: 12.5px">Policy fair-share, bucket default</div>
+            </div>
+          </div>
+          <div class="sec">
+            <h3>Timeline</h3>
+            <div class="ev">
+              <sc-for list="{{events}}" as="e" hint-placeholder-count="6">
+                <span class="t">{{e.t}}</span><span>{{e.text}}</span>
+              </sc-for>
+            </div>
+          </div>
+          <div class="sec" style="display: flex; gap: 8px; flex-wrap: wrap">
+            <a class="btn" href="#diagnostics" style="height: 30px; text-decoration: none">Open diagnostics</a>
+            <a class="btn" href="#graph" style="height: 30px; text-decoration: none">Open graph</a>
+            <a class="btn" href="#io" style="height: 30px; text-decoration: none">Open I/O</a>
+          </div>
+        </sc-if>
+        <sc-if value="{{noSel}}" hint-placeholder-val="{{ false }}">
+          <div style="padding: 32px 24px" class="muted">Select a run to see its timeline, estimate and retention.</div>
+        </sc-if>
+      </section>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#D9B06A","options":["#D9B06A","#9FB7D9","#A7C4A0"]},"showLanes":{"editor":"boolean","default":true},"actionsIn":{"editor":"enum","default":"list","options":["list","detail"]},"engineOffline":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  data() {
+    return [
+      { id: 'run_01JB2K7Q3M', wf: 'ingest-docs-rag', ver: '1.4.0', status: 'running', runtime: 'llama.cpp', device: 'cuda:0, RTX 4090', queue: '—', prio: 0, est: 'About 2 min left', reason: 'embed_chunks 61%', started: '20:01:40', dur: '4m 12s', updated: '20:05:51' },
+      { id: 'run_01JB2K9F0A', wf: 'image-gen-sdxl', ver: '0.9.2', status: 'running', runtime: 'diffusers', device: 'cuda:1, RTX 3090', queue: '—', prio: 0, est: 'About 40 s left', reason: 'sampling 18/30', started: '20:04:02', dur: '1m 49s', updated: '20:05:50' },
+      { id: 'run_01JB2KB4ZT', wf: 'transcribe-meeting', ver: '2.1.0', status: 'waiting', runtime: 'whisper', device: 'needs cuda:0', queue: '1', prio: 5, est: 'Starts after ingest-docs-rag', reason: 'Waiting for 8 GB VRAM', started: '—', dur: '—', updated: '20:05:12' },
+      { id: 'run_01JB2KC1PX', wf: 'summarize-daily', ver: '1.0.3', status: 'queued', runtime: 'llama.cpp', device: 'any cuda', queue: '2', prio: 0, est: 'About 6 min', reason: 'Model cached', started: '—', dur: '—', updated: '20:04:40' },
+      { id: 'run_01JB2KD8RN', wf: 'embed-corpus', ver: '1.4.0', status: 'queued', runtime: 'llama.cpp', device: 'any cuda', queue: '3', prio: 0, est: 'About 9 min', reason: 'Cold load, 12 s', started: '—', dur: '—', updated: '20:04:41' },
+      { id: 'run_01JB2KE2QW', wf: 'image-gen-sdxl', ver: '0.9.2', status: 'queued', runtime: 'diffusers', device: 'any cuda', queue: '4', prio: 0, est: 'About 2 min', reason: 'Model cached', started: '—', dur: '—', updated: '20:04:55' },
+      { id: 'run_01JB2JZ0MT', wf: 'summarize-daily', ver: '1.0.3', status: 'succeeded', runtime: 'llama.cpp', device: 'cuda:0, RTX 4090', queue: '—', prio: 0, est: 'Finished in 38 s', reason: '', started: '19:52:10', dur: '38 s', updated: '19:52:48' },
+      { id: 'run_01JB2JV7KD', wf: 'embed-corpus', ver: '1.3.9', status: 'succeeded', runtime: 'llama.cpp', device: 'cuda:0, RTX 4090', queue: '—', prio: 0, est: 'Finished in 11m 03s', reason: '', started: '19:38:01', dur: '11m 03s', updated: '19:49:04' },
+      { id: 'run_01JB2JT3HB', wf: 'image-gen-sdxl', ver: '0.9.1', status: 'failed', runtime: 'diffusers', device: 'cuda:1, RTX 3090', queue: '—', prio: 0, est: 'Stopped after 22 s', reason: 'Out of memory on cuda:1, needed 14.2 GB', started: '19:35:20', dur: '22 s', updated: '19:35:42' },
+      { id: 'run_01JB2JQ9XA', wf: 'transcribe-meeting', ver: '2.0.0', status: 'cancelled', runtime: 'whisper', device: 'cuda:0, RTX 4090', queue: '—', prio: 0, est: 'Stopped after 1m 10s', reason: 'Cancelled from the GUI', started: '19:30:05', dur: '1m 10s', updated: '19:31:15' }
+    ];
+  }
+  eventsFor(run) {
+    const map = {
+      run_01JB2K7Q3M: [
+        { t: '20:01:12', text: 'Accepted from gui, session s-4f2a' },
+        { t: '20:01:12', text: 'Enqueued under fair-share, priority 0' },
+        { t: '20:01:38', text: 'Placed on cuda:0 with llama.cpp, model cached' },
+        { t: '20:01:40', text: 'Started' },
+        { t: '20:03:05', text: 'chunk_documents finished, 412 chunks' },
+        { t: '20:05:51', text: 'embed_chunks running, 61%' }
+      ],
+      run_01JB2KB4ZT: [
+        { t: '20:03:50', text: 'Accepted from cli' },
+        { t: '20:03:50', text: 'Enqueued, priority 5' },
+        { t: '20:05:12', text: 'Waiting for 8 GB VRAM on cuda:0' }
+      ],
+      run_01JB2JT3HB: [
+        { t: '19:35:02', text: 'Accepted from gui' },
+        { t: '19:35:18', text: 'Placed on cuda:1 with diffusers' },
+        { t: '19:35:20', text: 'Started' },
+        { t: '19:35:42', text: 'Failed in load_model: out of memory, needed 14.2 GB, had 9.8 GB' }
+      ]
+    };
+    return map[run.id] || [
+      { t: run.updated, text: 'Last projection update' },
+      { t: run.started === '—' ? '—' : run.started, text: run.started === '—' ? 'Not started yet' : 'Started' }
+    ];
+  }
+  renderVals() {
+    const st = this.state || {};
+    const selectedId = st.selected || 'run_01JB2K7Q3M';
+    const filter = st.filter || 'all';
+    const more = !!st.more;
+    const labels = { running: 'Running', waiting: 'Waiting', queued: 'Queued', succeeded: 'Succeeded', failed: 'Failed', cancelled: 'Cancelled' };
+    const groups = { all: null, active: ['running', 'waiting'], queued: ['queued'], done: ['succeeded', 'cancelled'], failed: ['failed'] };
+    const all = this.data();
+    const count = (keys) => all.filter((r) => !keys || keys.includes(r.status)).length;
+    const filters = [['all', 'All'], ['active', 'Active'], ['queued', 'Queued'], ['done', 'Done'], ['failed', 'Failed']].map(([key, label]) => ({
+      key, label, count: count(groups[key]), active: key === filter, pick: () => this.setState({ filter: key })
+    }));
+    const decorate = (r) => ({
+      ...r,
+      glyph: 'g-' + r.status,
+      stClass: r.status === 'failed' ? 'st-failed' : '',
+      statusLabel: labels[r.status],
+      reasonSuffix: r.reason ? ', ' + r.reason : '',
+      placement: r.runtime + ' on ' + r.device,
+      reasonOrPlaced: r.reason || 'Placed on ' + r.device,
+      selected: r.id === selectedId,
+      pick: () => this.setState({ selected: r.id })
+    });
+    const runs = all.filter((r) => !groups[filter] || groups[filter].includes(r.status)).map(decorate);
+    const selRaw = all.find((r) => r.id === selectedId);
+    const sel = selRaw ? decorate(selRaw) : decorate(all[0]);
+    const running = count(['running']), waiting = count(['waiting']), queued = count(['queued']);
+    const lanes = [
+      { name: 'cuda:0 4090', meta: '18.2 of 24 GB in use', blocks: [
+        { label: 'ingest-docs-rag 61%', cls: 'blk-running', flex: 6, title: 'Running, about 2 min left' },
+        { label: 'transcribe-meeting', cls: 'blk-waiting', flex: 4, title: 'Waiting for 8 GB VRAM' }
+      ] },
+      { name: 'cuda:1 3090', meta: '9.8 of 24 GB in use', blocks: [
+        { label: 'image-gen-sdxl 18/30', cls: 'blk-running', flex: 4, title: 'Running, about 40 s left' },
+        { label: 'next: summarize-daily', cls: 'blk-queued', flex: 3, title: 'Next on this device, about 6 min' },
+        { label: '', cls: 'blk-free', flex: 3, title: 'Free' }
+      ] }
+    ];
+    const actionsIn = this.props.actionsIn ?? 'list';
+    return {
+      accent: this.props.accent ?? '#D9B06A',
+      engineOffline: !!this.props.engineOffline,
+      showLanes: this.props.showLanes ?? true,
+      summary: all.length + ' runs today, ' + running + ' running, ' + waiting + ' waiting, ' + queued + ' queued',
+      lanes, filters, runs, sel,
+      hasSel: !!selRaw, noSel: !selRaw,
+      selOpen: ['running', 'waiting', 'queued'].includes(sel.status),
+      showListActions: !!selRaw && ['running', 'waiting', 'queued'].includes(sel.status) && actionsIn === 'list',
+      showDetailActions: !!selRaw && ['running', 'waiting', 'queued'].includes(sel.status) && actionsIn === 'detail',
+      events: this.eventsFor(sel),
+      more, moreLabel: more ? 'Fewer' : 'Filters',
+      toggleMore: () => this.setState({ more: !more })
+    };
+  }
+}
+</script>
+</body>
+</html>

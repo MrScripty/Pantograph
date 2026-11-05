@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ManagedRuntimeSelectionState } from '../../services/managedRuntime';
+  import { sentenceCaseState } from './managedRuntimePresenters';
 
   type Props = {
     available: boolean;
@@ -18,32 +19,27 @@
   }: Props = $props();
 </script>
 
-<div class="mt-3 border-t border-neutral-800 pt-3">
-  <dl class="grid gap-x-4 gap-y-2 text-xs sm:grid-cols-2 xl:grid-cols-4">
-    <div class="min-w-0">
-      <dt class="text-neutral-500">Selected</dt>
-      <dd class="mt-1 truncate text-sm text-neutral-200" title={selection.selected_version ?? 'Automatic'}>
-        {selection.selected_version ?? 'Automatic'}
-      </dd>
-    </div>
-    <div class="min-w-0">
-      <dt class="text-neutral-500">Default</dt>
-      <dd class="mt-1 truncate text-sm text-neutral-200" title={selection.default_version ?? 'Unset'}>
-        {selection.default_version ?? 'Unset'}
-      </dd>
-    </div>
-    <div class="min-w-0">
-      <dt class="text-neutral-500">Install State</dt>
-      <dd class="mt-1 text-sm capitalize text-neutral-200">{installState.replaceAll('_', ' ')}</dd>
-    </div>
-    <div class="min-w-0">
-      <dt class="text-neutral-500">Footprint</dt>
-      <dd class="mt-1 text-sm text-neutral-200">
-        {downloadSizeLabel}
-        <span class="text-neutral-500">
-          &nbsp;• {available ? 'ready on this host' : `${installedVersionCount} installed`}
-        </span>
-      </dd>
-    </div>
-  </dl>
-</div>
+<dl class="m-0 mt-3 grid gap-x-4 gap-y-2 border-t border-pg-border-soft pt-3 pg-small sm:grid-cols-2 xl:grid-cols-4">
+  <div class="min-w-0">
+    <dt class="pg-muted">Selected</dt>
+    <dd class="m-0 mt-0.5 truncate pg-mono" title={selection.selected_version ?? 'Automatic'}>
+      {selection.selected_version ?? 'Automatic'}
+    </dd>
+  </div>
+  <div class="min-w-0">
+    <dt class="pg-muted">Default</dt>
+    <dd class="m-0 mt-0.5 truncate pg-mono" title={selection.default_version ?? 'Unset'}>
+      {selection.default_version ?? 'Unset'}
+    </dd>
+  </div>
+  <div class="min-w-0">
+    <dt class="pg-muted">Install state</dt>
+    <dd class="m-0 mt-0.5">{sentenceCaseState(installState)}</dd>
+  </div>
+  <div class="min-w-0">
+    <dt class="pg-muted">Footprint</dt>
+    <dd class="m-0 mt-0.5">
+      <span class="pg-mono">{downloadSizeLabel}</span><span class="pg-muted">, {available ? 'ready on this host' : `${installedVersionCount} installed`}</span>
+    </dd>
+  </div>
+</dl>

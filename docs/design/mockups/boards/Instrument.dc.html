@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Scheduler, night instrument direction</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@87.5,400;87.5,500;100,400;100,500;100,600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#141923;color:#E8EBF0;font-family:Archivo,system-ui,sans-serif;font-size:14px;line-height:1.45}
+a{color:#E8EBF0}a:hover{color:#fff}
+*,*::before,*::after{box-sizing:border-box}
+button,input,select{font:inherit;color:inherit}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12.5px}
+.muted{color:#A6AFBE}
+.cond{font-stretch:87.5%}
+.rail-link{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 4px;border-radius:6px;text-decoration:none;color:#A6AFBE;font-size:10.5px;letter-spacing:.01em}
+.rail-link:hover{color:#fff;background:rgba(255,255,255,.05)}
+.rail-link[aria-current="page"]{color:#fff;background:#232B3B}
+.rail-link svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.panel{background:#1B2130;border:1px solid #2A3345;border-radius:8px}
+.field{height:32px;padding:0 10px;border:1px solid #2F394D;border-radius:6px;background:#111620;color:#E8EBF0}
+.field:focus{outline:2px solid var(--accent);outline-offset:1px}
+.seg{display:flex;border:1px solid #2F394D;border-radius:6px;overflow:hidden;background:#111620}
+.seg button{height:30px;padding:0 12px;border:0;background:transparent;cursor:pointer;display:flex;gap:6px;align-items:center;color:#A6AFBE}
+.seg button+button{border-left:1px solid #2A3345}
+.seg button:hover{background:#232B3B;color:#fff}
+.seg button[aria-pressed="true"]{background:#2F394D;color:#fff}
+.seg .n{font-family:'JetBrains Mono',monospace;font-size:11.5px;opacity:.8}
+.btn{height:32px;padding:0 12px;border:1px solid #2F394D;border-radius:6px;background:#232B3B;cursor:pointer;display:inline-flex;align-items:center;gap:6px;color:#E8EBF0}
+.btn:hover{background:#2F394D}
+.btn:focus-visible,.seg button:focus-visible,.row:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.row{display:grid;grid-template-columns:18px 1.5fr 1.3fr 1fr 76px 70px;gap:12px;align-items:center;padding:10px 14px;border:0;border-top:1px solid #232B3B;background:transparent;text-align:left;cursor:pointer;width:100%;color:#E8EBF0}
+.row:hover{background:#1F2636}
+.row[aria-selected="true"]{background:#232B3B;box-shadow:inset 0 1px 0 rgba(214,222,232,.14),inset 3px 0 0 var(--accent)}
+.row .name{font-weight:600;color:#fff}
+.g{display:inline-block;width:10px;height:10px;border-radius:50%;border:1.5px solid #A6AFBE}
+.g-running{background:var(--accent);border-color:var(--accent)}
+.g-waiting{background:linear-gradient(90deg,var(--accent) 50%,transparent 50%);border-color:var(--accent)}
+.g-queued{background:transparent}
+.g-succeeded{background:#A6AFBE;border-color:#A6AFBE}
+.g-failed{background:#E89C9C;border-color:#E89C9C;border-radius:1px;transform:rotate(45deg) scale(.9)}
+.g-cancelled{border-style:dashed}
+.st-failed{color:#E89C9C}
+.gauge{padding:12px 14px;border-top:1px solid #232B3B}
+.gauge:first-child{border-top:0}
+.bar{height:6px;border-radius:3px;background:#2A3345;overflow:hidden;margin-top:6px}
+.bar>div{height:100%;background:var(--accent);border-radius:3px}
+.bar.quiet>div{background:#7E8AA0}
+.sec{padding:14px 16px;border-top:1px solid #232B3B}
+.sec h3{margin:0 0 8px;font-size:13px;font-weight:600;color:#fff}
+.ev{display:grid;grid-template-columns:62px 1fr;gap:4px 12px;font-size:13px}
+.ev .t{font-family:'JetBrains Mono',monospace;font-size:12px;color:#A6AFBE}
+.notice{display:flex;gap:12px;align-items:center;padding:8px 12px;border:1px solid #2F394D;background:#111620;border-radius:6px;font-size:13px}
+.chip{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 8px;border:1px solid #2F394D;border-radius:11px;font-size:12px;background:#111620}
+</style>
+</helmet>
+<div style="--accent: {{accent}}; min-height: 100vh; display: flex; flex-wrap: wrap; background: #141923">
+
+  <nav aria-label="Workbench pages" style="flex: 0 0 76px; padding: 14px 8px; display: flex; flex-direction: column; gap: 2px; border-right: 1px solid #232B3B; background: #111620">
+    <div style="display: flex; justify-content: center; padding: 4px 0 14px" aria-label="Pantograph">
+      <svg viewBox="0 0 24 24" width="24" height="24" role="img" aria-label="Pantograph mark" style="stroke:#D6DEE8;fill:none;stroke-width:1.5"><circle cx="12" cy="7" r="4"/><circle cx="7" cy="16" r="4"/><circle cx="17" cy="16" r="4"/></svg>
+    </div>
+    <a class="rail-link" href="#scheduler" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Scheduler</a>
+    <a class="rail-link" href="#diagnostics"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg>Diagnostics</a>
+    <a class="rail-link" href="#graph"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="12" r="2.5"/><path d="M8 7l8 4M8 17l8-4"/></svg>Graph</a>
+    <a class="rail-link" href="#io"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M3 9h18"/></svg>I/O</a>
+    <a class="rail-link" href="#library"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4v16M10 4v16M14 5l5 15"/></svg>Library</a>
+    <a class="rail-link" href="#network"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2.5"/><circle cx="5" cy="19" r="2.5"/><circle cx="19" cy="19" r="2.5"/><path d="M12 7.5v5M12 12.5l-5.5 4.5M12 12.5l5.5 4.5"/></svg>Network</a>
+    <a class="rail-link" href="#nodes"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6M10 3v6l-5 9a2 2 0 002 3h10a2 2 0 002-3l-5-9V3"/></svg>Nodes</a>
+    <a class="rail-link" href="#settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>Settings</a>
+    <div style="flex: 1"></div>
+    <a class="rail-link" href="#assistant"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>Assistant</a>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; padding: 18px 22px 26px; display: flex; flex-direction: column; gap: 14px">
+    <header style="display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap">
+      <h1 style="margin: 0; font-size: 20px; font-weight: 500">Scheduler</h1>
+      <div class="muted" style="font-size: 13px">{{summary}}</div>
+      <div class="muted" style="font-size: 13px; margin-left: auto; display: flex; align-items: center; gap: 8px"><span class="g g-succeeded" style="width:7px;height:7px" aria-hidden="true"></span>Local engine, updated 20:05:51</div>
+    </header>
+
+    <sc-if value="{{engineOffline}}" hint-placeholder-val="{{ false }}">
+      <div class="notice" role="status">
+        <span>Engine unreachable since 20:03. Showing the last projection; runs keep executing on the engine.</span>
+        <button class="btn" type="button" style="height: 26px; margin-left: auto">Retry now</button>
+      </div>
+    </sc-if>
+
+    <div style="display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap">
+
+      <aside class="panel" aria-label="Devices" style="flex: 1 1 200px; max-width: 240px; min-width: 190px">
+        <div class="gauge">
+          <div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-weight: 600">cuda:0</span><span class="mono muted" style="font-size: 11.5px">RTX 4090</span></div>
+          <div class="muted cond" style="font-size: 12.5px; margin-top: 2px">18.2 of 24 GB</div>
+          <div class="bar"><div style="width: 76%"></div></div>
+          <div style="font-size: 12.5px; margin-top: 8px">ingest-docs-rag, 61%</div>
+          <div class="muted" style="font-size: 12px">transcribe-meeting waits for 8 GB</div>
+        </div>
+        <div class="gauge">
+          <div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-weight: 600">cuda:1</span><span class="mono muted" style="font-size: 11.5px">RTX 3090</span></div>
+          <div class="muted cond" style="font-size: 12.5px; margin-top: 2px">9.8 of 24 GB</div>
+          <div class="bar"><div style="width: 41%"></div></div>
+          <div style="font-size: 12.5px; margin-top: 8px">image-gen-sdxl, 18 of 30 steps</div>
+        </div>
+        <div class="gauge">
+          <div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-weight: 600">cpu</span><span class="mono muted" style="font-size: 11.5px">32 threads</span></div>
+          <div class="muted cond" style="font-size: 12.5px; margin-top: 2px">RAM 41 of 128 GB</div>
+          <div class="bar quiet"><div style="width: 32%"></div></div>
+        </div>
+        <div class="gauge">
+          <div style="display: flex; justify-content: space-between; align-items: baseline"><span style="font-weight: 600">Artifacts</span><span class="mono muted" style="font-size: 11.5px">nvme0</span></div>
+          <div class="muted cond" style="font-size: 12.5px; margin-top: 2px">212 GB of 2 TB, 7 day retention</div>
+          <div class="bar quiet"><div style="width: 11%"></div></div>
+        </div>
+        <div class="gauge muted" style="font-size: 12.5px">Queue: 3 runs, about 17 min of work</div>
+      </aside>
+
+      <section style="flex: 999 1 460px; min-width: 0; display: flex; flex-direction: column; gap: 12px">
+        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap">
+          <label for="c-search" style="position: absolute; left: -9999px">Search runs</label>
+          <input id="c-search" class="field" type="search" placeholder="Search runs, workflows, nodes" style="flex: 1 1 200px; min-width: 160px">
+          <div class="seg" role="group" aria-label="Status">
+            <sc-for list="{{filters}}" as="f" hint-placeholder-count="5">
+              <button type="button" aria-pressed="{{f.active}}" onClick="{{f.pick}}">{{f.label}} <span class="n">{{f.count}}</span></button>
+            </sc-for>
+          </div>
+          <button class="btn" type="button" onClick="{{toggleMore}}" aria-expanded="{{more}}">{{moreLabel}}</button>
+        </div>
+
+        <sc-if value="{{more}}" hint-placeholder-val="{{ false }}">
+          <div class="panel" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr)); gap: 10px 12px; padding: 12px 14px">
+            <label style="font-size: 12.5px" class="muted">Sort<select class="field" style="display:block;width:100%;margin-top:4px"><option>Updated</option><option>Queued</option><option>Priority</option><option>Duration</option></select></label>
+            <label style="font-size: 12.5px" class="muted">Policy<select class="field" style="display:block;width:100%;margin-top:4px"><option>All</option><option>fair-share</option><option>fifo</option></select></label>
+            <label style="font-size: 12.5px" class="muted">Retention<select class="field" style="display:block;width:100%;margin-top:4px"><option>All</option><option>7 days</option><option>30 days</option></select></label>
+            <label style="font-size: 12.5px" class="muted">Client<select class="field" style="display:block;width:100%;margin-top:4px"><option>All</option><option>gui</option><option>cli</option></select></label>
+            <label style="font-size: 12.5px" class="muted">Session<select class="field" style="display:block;width:100%;margin-top:4px"><option>All</option></select></label>
+            <label style="font-size: 12.5px" class="muted">Bucket<select class="field" style="display:block;width:100%;margin-top:4px"><option>All</option><option>default</option></select></label>
+            <label style="font-size: 12.5px" class="muted">Runtime<select class="field" style="display:block;width:100%;margin-top:4px"><option>All</option><option>llama.cpp</option><option>diffusers</option><option>whisper</option></select></label>
+            <label style="font-size: 12.5px" class="muted">Backend<select class="field" style="display:block;width:100%;margin-top:4px"><option>All</option><option>cuda</option><option>cpu</option></select></label>
+            <label style="font-size: 12.5px" class="muted">Device<select class="field" style="display:block;width:100%;margin-top:4px"><option>All</option><option>cuda:0</option><option>cuda:1</option><option>cpu</option></select></label>
+            <label style="font-size: 12.5px" class="muted">Network node<select class="field" style="display:block;width:100%;margin-top:4px"><option>All</option><option>local</option></select></label>
+            <label style="font-size: 12.5px" class="muted">Accepted<select class="field" style="display:block;width:100%;margin-top:4px"><option>Any time</option><option>Today</option><option>This week</option></select></label>
+          </div>
+        </sc-if>
+
+        <div class="panel" role="list" aria-label="Runs" style="overflow: hidden">
+          <div class="row muted" role="presentation" style="border-top: 0; font-size: 12px; cursor: default; padding-top: 8px; padding-bottom: 8px"><span></span><span>Run</span><span>Status</span><span>Placement</span><span>Started</span><span>Duration</span></div>
+          <sc-for list="{{runs}}" as="run" hint-placeholder-count="10">
+            <button class="row" type="button" role="listitem" aria-selected="{{run.selected}}" onClick="{{run.pick}}">
+              <span class="g {{run.glyph}}" aria-hidden="true"></span>
+              <span><span class="name">{{run.wf}}</span><span class="mono muted" style="display: block">{{run.id}} · v{{run.ver}}</span></span>
+              <span><span class="{{run.stClass}}">{{run.statusLabel}}</span><span class="muted" style="display: block; font-size: 12.5px">{{run.reason}}</span></span>
+              <span>{{run.runtime}}<span class="muted" style="display: block; font-size: 12.5px">{{run.device}}</span></span>
+              <span class="mono">{{run.started}}</span>
+              <span class="mono">{{run.dur}}</span>
+            </button>
+          </sc-for>
+        </div>
+      </section>
+
+      <aside class="panel" aria-label="Run detail" style="flex: 1 1 320px; max-width: 380px; min-width: 290px">
+        <sc-if value="{{hasSel}}" hint-placeholder-val="{{ true }}">
+          <div style="padding: 16px 16px 14px">
+            <div style="font-size: 18px; font-weight: 600; color: #fff">{{sel.wf}}</div>
+            <div class="mono muted" style="margin-top: 2px">{{sel.id}}</div>
+            <div style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center">
+              <span class="chip"><span class="g {{sel.glyph}}" aria-hidden="true"></span>{{sel.statusLabel}}</span>
+              <span class="chip">{{sel.device}}</span>
+              <span class="chip">priority {{sel.prio}}</span>
+            </div>
+          </div>
+          <sc-if value="{{selOpen}}" hint-placeholder-val="{{ true }}">
+            <div class="sec" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center">
+              <button class="btn" type="button" style="height: 28px">Cancel run</button>
+              <button class="btn" type="button" style="height: 28px">Move to front</button>
+              <label class="muted" style="font-size: 12.5px; display: flex; align-items: center; gap: 6px; margin-left: auto">Priority <input class="field" type="number" value="0" style="width: 60px; height: 28px"></label>
+            </div>
+          </sc-if>
+          <div class="sec">
+            <h3>Estimate</h3>
+            <div>{{sel.est}}</div>
+            <div class="muted" style="font-size: 12.5px">Based on 14 earlier runs of this version</div>
+          </div>
+          <div class="sec">
+            <h3>Retention</h3>
+            <div>Keep artifacts 7 days, 212 MB on disk</div>
+            <div class="muted" style="font-size: 12.5px">Expires 2026-11-09</div>
+          </div>
+          <div class="sec">
+            <h3>Timeline</h3>
+            <div class="ev">
+              <sc-for list="{{events}}" as="e" hint-placeholder-count="5">
+                <span class="t">{{e.t}}</span><span>{{e.text}}</span>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+        <sc-if value="{{noSel}}" hint-placeholder-val="{{ false }}">
+          <div style="padding: 28px 20px" class="muted">Select a run to see its timeline, estimate and retention.</div>
+        </sc-if>
+      </aside>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#CDA467","options":["#CDA467","#D6DEE8","#8FB3D9"]},"engineOffline":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  data() {
+    return [
+      { id: 'run_01JB2K7Q3M', wf: 'ingest-docs-rag', ver: '1.4.0', status: 'running', runtime: 'llama.cpp', device: 'cuda:0, RTX 4090', queue: '—', prio: 0, est: 'About 2 min left', reason: 'embed_chunks 61%', started: '20:01:40', dur: '4m 12s', updated: '20:05:51' },
+      { id: 'run_01JB2K9F0A', wf: 'image-gen-sdxl', ver: '0.9.2', status: 'running', runtime: 'diffusers', device: 'cuda:1, RTX 3090', queue: '—', prio: 0, est: 'About 40 s left', reason: 'sampling 18/30', started: '20:04:02', dur: '1m 49s', updated: '20:05:50' },
+      { id: 'run_01JB2KB4ZT', wf: 'transcribe-meeting', ver: '2.1.0', status: 'waiting', runtime: 'whisper', device: 'needs cuda:0', queue: '1', prio: 5, est: 'Starts after ingest-docs-rag', reason: 'Waiting for 8 GB VRAM', started: '—', dur: '—', updated: '20:05:12' },
+      { id: 'run_01JB2KC1PX', wf: 'summarize-daily', ver: '1.0.3', status: 'queued', runtime: 'llama.cpp', device: 'any cuda', queue: '2', prio: 0, est: 'About 6 min', reason: 'Model cached', started: '—', dur: '—', updated: '20:04:40' },
+      { id: 'run_01JB2KD8RN', wf: 'embed-corpus', ver: '1.4.0', status: 'queued', runtime: 'llama.cpp', device: 'any cuda', queue: '3', prio: 0, est: 'About 9 min', reason: 'Cold load, 12 s', started: '—', dur: '—', updated: '20:04:41' },
+      { id: 'run_01JB2KE2QW', wf: 'image-gen-sdxl', ver: '0.9.2', status: 'queued', runtime: 'diffusers', device: 'any cuda', queue: '4', prio: 0, est: 'About 2 min', reason: 'Model cached', started: '—', dur: '—', updated: '20:04:55' },
+      { id: 'run_01JB2JZ0MT', wf: 'summarize-daily', ver: '1.0.3', status: 'succeeded', runtime: 'llama.cpp', device: 'cuda:0, RTX 4090', queue: '—', prio: 0, est: 'Finished', reason: '', started: '19:52:10', dur: '38 s', updated: '19:52:48' },
+      { id: 'run_01JB2JV7KD', wf: 'embed-corpus', ver: '1.3.9', status: 'succeeded', runtime: 'llama.cpp', device: 'cuda:0, RTX 4090', queue: '—', prio: 0, est: 'Finished', reason: '', started: '19:38:01', dur: '11m 03s', updated: '19:49:04' },
+      { id: 'run_01JB2JT3HB', wf: 'image-gen-sdxl', ver: '0.9.1', status: 'failed', runtime: 'diffusers', device: 'cuda:1, RTX 3090', queue: '—', prio: 0, est: 'Stopped', reason: 'Out of memory on cuda:1, needed 14.2 GB', started: '19:35:20', dur: '22 s', updated: '19:35:42' },
+      { id: 'run_01JB2JQ9XA', wf: 'transcribe-meeting', ver: '2.0.0', status: 'cancelled', runtime: 'whisper', device: 'cuda:0, RTX 4090', queue: '—', prio: 0, est: 'Stopped', reason: 'Cancelled from the GUI', started: '19:30:05', dur: '1m 10s', updated: '19:31:15' }
+    ];
+  }
+  eventsFor(run) {
+    const map = {
+      run_01JB2K7Q3M: [
+        { t: '20:01:12', text: 'Accepted from gui, session s-4f2a' },
+        { t: '20:01:12', text: 'Enqueued under fair-share, priority 0' },
+        { t: '20:01:38', text: 'Placed on cuda:0 with llama.cpp, model cached' },
+        { t: '20:01:40', text: 'Started' },
+        { t: '20:03:05', text: 'chunk_documents finished, 412 chunks' },
+        { t: '20:05:51', text: 'embed_chunks running, 61%' }
+      ],
+      run_01JB2KB4ZT: [
+        { t: '20:03:50', text: 'Accepted from cli' },
+        { t: '20:03:50', text: 'Enqueued, priority 5' },
+        { t: '20:05:12', text: 'Waiting for 8 GB VRAM on cuda:0' }
+      ],
+      run_01JB2JT3HB: [
+        { t: '19:35:02', text: 'Accepted from gui' },
+        { t: '19:35:18', text: 'Placed on cuda:1 with diffusers' },
+        { t: '19:35:20', text: 'Started' },
+        { t: '19:35:42', text: 'Failed in load_model: out of memory, needed 14.2 GB, had 9.8 GB' }
+      ]
+    };
+    return map[run.id] || [
+      { t: run.updated, text: 'Last projection update' },
+      { t: run.started === '—' ? '—' : run.started, text: run.started === '—' ? 'Not started yet' : 'Started' }
+    ];
+  }
+  renderVals() {
+    const st = this.state || {};
+    const selectedId = st.selected || 'run_01JB2K7Q3M';
+    const filter = st.filter || 'all';
+    const more = !!st.more;
+    const labels = { running: 'Running', waiting: 'Waiting', queued: 'Queued', succeeded: 'Succeeded', failed: 'Failed', cancelled: 'Cancelled' };
+    const groups = { all: null, active: ['running', 'waiting'], queued: ['queued'], done: ['succeeded', 'cancelled'], failed: ['failed'] };
+    const all = this.data();
+    const count = (keys) => all.filter((r) => !keys || keys.includes(r.status)).length;
+    const filters = [['all', 'All'], ['active', 'Active'], ['queued', 'Queued'], ['done', 'Finished'], ['failed', 'Failed']].map(([key, label]) => ({
+      key, label, count: count(groups[key]), active: key === filter, pick: () => this.setState({ filter: key })
+    }));
+    const decorate = (r) => ({
+      ...r,
+      glyph: 'g-' + r.status,
+      stClass: r.status === 'failed' ? 'st-failed' : '',
+      statusLabel: labels[r.status],
+      selected: r.id === selectedId,
+      pick: () => this.setState({ selected: r.id })
+    });
+    const runs = all.filter((r) => !groups[filter] || groups[filter].includes(r.status)).map(decorate);
+    const selRaw = all.find((r) => r.id === selectedId);
+    const sel = selRaw ? decorate(selRaw) : decorate(all[0]);
+    const running = count(['running']), waiting = count(['waiting']), queued = count(['queued']);
+    return {
+      accent: this.props.accent ?? '#CDA467',
+      engineOffline: !!this.props.engineOffline,
+      summary: all.length + ' runs today, ' + running + ' running, ' + waiting + ' waiting, ' + queued + ' queued',
+      filters, runs, sel,
+      hasSel: !!selRaw, noSel: !selRaw,
+      selOpen: ['running', 'waiting', 'queued'].includes(sel.status),
+      events: this.eventsFor(sel),
+      more, moreLabel: more ? 'Fewer filters' : 'More filters and sort',
+      toggleMore: () => this.setState({ more: !more })
+    };
+  }
+}
+</script>
+</body>
+</html>

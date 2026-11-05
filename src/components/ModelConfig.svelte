@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { ConfigService, type ConfigState, type ModelConfig } from '../services/ConfigService';
   import { expandedSection, toggleSection } from '../stores/accordionStore';
+  import { StatusGlyph } from './workbench/ui';
 
   let state: ConfigState = $state(ConfigService.getState());
   let unsubscribe: (() => void) | null = null;
@@ -86,172 +87,138 @@
   );
 
   let isConfigured = $derived(vlmModelPath && vlmMmprojPath);
+
 </script>
 
-<div class="space-y-3">
-  <!-- Header with toggle -->
-  <button type="button"
-    class="w-full flex items-center justify-between text-xs uppercase tracking-wider text-neutral-500 hover:text-neutral-400 transition-colors"
-    onclick={() => toggleSection('model')}
-  >
-    <div class="flex items-center gap-2">
-      <span>Model Configuration</span>
-      {#if isConfigured}
-        <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-      {:else}
-        <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-      {/if}
-    </div>
-    <svg
-      class="w-3 h-3 transform transition-transform {$expandedSection === 'model' ? 'rotate-180' : ''}"
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-    >
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-    </svg>
-  </button>
+<section class="pg-card" aria-labelledby="settings-model-title">
+  <div class="flex items-center gap-2">
+    <h3 class="m-0 min-w-0 flex-1">
+      <button
+        type="button"
+        id="settings-model-title"
+        class="flex w-full items-center gap-2 text-left text-[13px] font-bold text-pg-text-bright"
+        aria-expanded={$expandedSection === 'model'}
+        onclick={() => toggleSection('model')}
+      >
+        Model configuration
+        <span class="pg-muted text-[11px] font-normal" aria-hidden="true">
+          {$expandedSection === 'model' ? '▴' : '▾'}
+        </span>
+      </button>
+    </h3>
+    <span class="flex items-center gap-1.5 pg-small text-pg-text-soft">
+      <StatusGlyph state={isConfigured ? 'succeeded' : 'warn'} small />
+      {isConfigured ? 'Configured' : 'Not configured'}
+    </span>
+  </div>
 
   {#if $expandedSection === 'model'}
-    <div class="space-y-4 p-3 bg-neutral-800/30 rounded-lg">
-      <!-- VLM Model Section -->
-      <div class="space-y-2">
-        <div class="text-[10px] text-neutral-600 uppercase tracking-wider">
-          Vision-Language Model (VLM)
-        </div>
+    <div class="mt-3 flex flex-col gap-4 border-t border-pg-border-soft pt-3">
+      <div class="flex flex-col gap-2">
+        <h4 class="m-0 text-[12.5px] font-bold text-pg-text-soft">Vision-language model (VLM)</h4>
 
-        <!-- Model Path -->
-        <div class="space-y-1">
-          <label for="vlm-model-path" class="text-xs text-neutral-400">Model File</label>
-          <div class="flex gap-2">
-            <input
-              id="vlm-model-path"
-              type="text"
-              bind:value={vlmModelPath}
-              placeholder="Select model file..."
-              class="flex-1 bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-neutral-500 truncate"
-              title={vlmModelPath}
-            />
-            <button type="button"
-              onclick={pickVlmModel}
-              class="px-2 py-1.5 bg-neutral-700 hover:bg-neutral-600 rounded text-xs transition-colors"
-            >
-              Browse
-            </button>
-          </div>
-          {#if vlmModelPath}
-            <div class="text-[10px] text-neutral-600 truncate">{getFileName(vlmModelPath)}</div>
-          {/if}
+      <div class="flex flex-col gap-1">
+        <label for="vlm-model-path" class="pg-fl">Model file</label>
+        <div class="flex gap-2">
+          <input
+            id="vlm-model-path"
+            type="text"
+            bind:value={vlmModelPath}
+            placeholder="Select model file..."
+            class="pg-field pg-mono min-w-0 flex-1 truncate"
+            title={vlmModelPath}
+          />
+          <button type="button" onclick={pickVlmModel} class="pg-btn" aria-label="Browse for VLM model file">
+            Browse
+          </button>
         </div>
-
-        <!-- MMProj Path -->
-        <div class="space-y-1">
-          <label for="vlm-mmproj-path" class="text-xs text-neutral-400">MMProj File</label>
-          <div class="flex gap-2">
-            <input
-              id="vlm-mmproj-path"
-              type="text"
-              bind:value={vlmMmprojPath}
-              placeholder="Select mmproj file..."
-              class="flex-1 bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-neutral-500 truncate"
-              title={vlmMmprojPath}
-            />
-            <button type="button"
-              onclick={pickMmproj}
-              class="px-2 py-1.5 bg-neutral-700 hover:bg-neutral-600 rounded text-xs transition-colors"
-            >
-              Browse
-            </button>
-          </div>
-          {#if vlmMmprojPath}
-            <div class="text-[10px] text-neutral-600 truncate">{getFileName(vlmMmprojPath)}</div>
-          {/if}
-        </div>
+        {#if vlmModelPath}
+          <p class="m-0 pg-muted pg-small truncate">{getFileName(vlmModelPath)}</p>
+        {/if}
       </div>
 
-      <!-- Embedding Model Section -->
-      <div class="space-y-2 border-t border-neutral-700 pt-3">
-        <div class="text-[10px] text-neutral-600 uppercase tracking-wider">
-          Embedding Model (for RAG)
+      <div class="flex flex-col gap-1">
+        <label for="vlm-mmproj-path" class="pg-fl">MMProj file</label>
+        <div class="flex gap-2">
+          <input
+            id="vlm-mmproj-path"
+            type="text"
+            bind:value={vlmMmprojPath}
+            placeholder="Select mmproj file..."
+            class="pg-field pg-mono min-w-0 flex-1 truncate"
+            title={vlmMmprojPath}
+          />
+          <button type="button" onclick={pickMmproj} class="pg-btn" aria-label="Browse for MMProj file">
+            Browse
+          </button>
         </div>
-
-        <!-- GGUF Embedding Model (llama.cpp) -->
-        <div class="space-y-1">
-          <label for="embedding-model-path" class="text-xs text-neutral-400">GGUF Model File (llama.cpp)</label>
-          <div class="flex gap-2">
-            <input
-              id="embedding-model-path"
-              type="text"
-              bind:value={embeddingModelPath}
-              placeholder="Select embedding model..."
-              class="flex-1 bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-neutral-500 truncate"
-              title={embeddingModelPath}
-            />
-            <button type="button"
-              onclick={pickEmbeddingModel}
-              class="px-2 py-1.5 bg-neutral-700 hover:bg-neutral-600 rounded text-xs transition-colors"
-            >
-              Browse
-            </button>
-          </div>
-          {#if embeddingModelPath}
-            <div class="text-[10px] text-neutral-600 truncate">{getFileName(embeddingModelPath)}</div>
-          {/if}
-        </div>
-
-        <!-- SafeTensors Embedding Model (Candle) -->
-        <div class="space-y-1">
-          <label for="candle-embedding-path" class="text-xs text-neutral-400">SafeTensors Model Directory (Candle)</label>
-          <div class="flex gap-2">
-            <input
-              id="candle-embedding-path"
-              type="text"
-              bind:value={candleEmbeddingModelPath}
-              placeholder="e.g., ~/models/bge-small-en-v1.5/"
-              class="flex-1 bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-xs text-neutral-200 focus:outline-none focus:border-neutral-500 truncate"
-              title={candleEmbeddingModelPath}
-            />
-            <button type="button"
-              onclick={pickCandleEmbeddingModel}
-              class="px-2 py-1.5 bg-neutral-700 hover:bg-neutral-600 rounded text-xs transition-colors"
-            >
-              Browse
-            </button>
-          </div>
-          {#if candleEmbeddingModelPath}
-            <div class="text-[10px] text-neutral-600 truncate">{getFileName(candleEmbeddingModelPath)}</div>
-          {/if}
-          <div class="text-[10px] text-neutral-600">
-            Directory with config.json, tokenizer.json, and model.safetensors
-          </div>
-        </div>
+        {#if vlmMmprojPath}
+          <p class="m-0 pg-muted pg-small truncate">{getFileName(vlmMmprojPath)}</p>
+        {/if}
+      </div>
       </div>
 
-      <!-- Save Button -->
+      <div class="flex flex-col gap-2 border-t border-pg-border-soft pt-3">
+        <h4 class="m-0 text-[12.5px] font-bold text-pg-text-soft">Embedding model (for RAG)</h4>
+
+      <div class="flex flex-col gap-1">
+        <label for="embedding-model-path" class="pg-fl">GGUF model file (llama.cpp)</label>
+        <div class="flex gap-2">
+          <input
+            id="embedding-model-path"
+            type="text"
+            bind:value={embeddingModelPath}
+            placeholder="Select embedding model..."
+            class="pg-field pg-mono min-w-0 flex-1 truncate"
+            title={embeddingModelPath}
+          />
+          <button type="button" onclick={pickEmbeddingModel} class="pg-btn" aria-label="Browse for GGUF embedding model file">
+            Browse
+          </button>
+        </div>
+        {#if embeddingModelPath}
+          <p class="m-0 pg-muted pg-small truncate">{getFileName(embeddingModelPath)}</p>
+        {/if}
+      </div>
+
+      <div class="flex flex-col gap-1">
+        <label for="candle-embedding-path" class="pg-fl">SafeTensors model directory (Candle)</label>
+        <div class="flex gap-2">
+          <input
+            id="candle-embedding-path"
+            type="text"
+            bind:value={candleEmbeddingModelPath}
+            placeholder="e.g., ~/models/bge-small-en-v1.5/"
+            class="pg-field pg-mono min-w-0 flex-1 truncate"
+            title={candleEmbeddingModelPath}
+          />
+          <button type="button" onclick={pickCandleEmbeddingModel} class="pg-btn" aria-label="Browse for SafeTensors model directory">
+            Browse
+          </button>
+        </div>
+        {#if candleEmbeddingModelPath}
+          <p class="m-0 pg-muted pg-small truncate">{getFileName(candleEmbeddingModelPath)}</p>
+        {/if}
+        <p class="m-0 pg-muted pg-small">Directory with config.json, tokenizer.json, and model.safetensors</p>
+      </div>
+      </div>
+
       {#if hasChanges}
-        <button type="button"
-          onclick={saveConfig}
-          disabled={isSaving}
-          class="w-full py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-700 disabled:text-neutral-500 rounded text-xs transition-colors"
-        >
-          {isSaving ? 'Saving...' : 'Save Configuration'}
-        </button>
+        <div>
+          <button type="button" onclick={saveConfig} disabled={isSaving} class="pg-btn pg-btn-primary">
+            {isSaving ? 'Saving...' : 'Save configuration'}
+          </button>
+        </div>
       {/if}
 
-      <!-- Help text -->
-      <div class="text-[10px] text-neutral-600 leading-relaxed">
+      <p class="m-0 pg-muted pg-small">
         Configure model paths for the built-in llama.cpp server. VLM models enable vision-language
         inference, embedding models enable RAG search.
-      </div>
+      </p>
     </div>
   {:else}
-    <!-- Collapsed summary -->
-    <div class="text-xs text-neutral-500">
-      {#if isConfigured}
-        <span class="text-neutral-400">{getFileName(vlmModelPath)}</span>
-      {:else}
-        <span class="text-amber-400">Not configured</span>
-      {/if}
-    </div>
+    <p class="m-0 mt-1 pg-muted pg-small truncate">
+      {isConfigured ? getFileName(vlmModelPath) : 'Not configured'}
+    </p>
   {/if}
-</div>
+</section>

@@ -6,6 +6,7 @@
   import { LLMService } from '../services/LLMService';
   import { openChunkPreview } from '../stores/chunkPreviewStore';
   import { expandedSection, toggleSection } from '../stores/accordionStore';
+  import { StatusGlyph, type GlyphState } from './workbench/ui';
 
   let ragState: RagState = $state(RagService.getState());
   let configState: ConfigState = $state(ConfigService.getState());
@@ -155,227 +156,191 @@
     configState.serverMode.mode === 'sidecar_inference' &&
     !ragState.status.vectorizer_available
   );
+
+  let indexing = $derived(ragState.isIndexing || isIndexingWithSwitch);
+
+  let indexGlyph = $derived<GlyphState>(
+    ragState.status.vectors_indexed ? 'succeeded' : indexing ? 'running' : 'idle'
+  );
+
+  let docsGlyph = $derived<GlyphState>(
+    ragState.status.docs_available ? 'succeeded' : isDownloadingDocs ? 'running' : 'idle'
+  );
 </script>
 
-<div class="space-y-3">
-  <!-- Header with toggle -->
-  <button type="button"
-    class="w-full flex items-center justify-between text-xs uppercase tracking-wider text-neutral-500 hover:text-neutral-400 transition-colors"
-    onclick={() => toggleSection('rag')}
-  >
-    <div class="flex items-center gap-2">
-      <span>Documentation & RAG</span>
-      {#if ragState.status.vectors_indexed}
-        <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-      {:else if ragState.isIndexing || isIndexingWithSwitch}
-        <span class="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse"></span>
-      {/if}
-    </div>
-    <svg
-      class="w-3 h-3 transform transition-transform {$expandedSection === 'rag' ? 'rotate-180' : ''}"
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-    >
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-    </svg>
-  </button>
+<section class="pg-card" aria-labelledby="settings-rag-title">
+  <div class="flex items-center gap-2">
+    <h3 class="m-0 min-w-0 flex-1">
+      <button
+        type="button"
+        id="settings-rag-title"
+        class="flex w-full items-center gap-2 text-left text-[13px] font-bold text-pg-text-bright"
+        aria-expanded={$expandedSection === 'rag'}
+        onclick={() => toggleSection('rag')}
+      >
+        Documentation and RAG
+        <span class="pg-muted text-[11px] font-normal" aria-hidden="true">
+          {$expandedSection === 'rag' ? '▴' : '▾'}
+        </span>
+      </button>
+    </h3>
+    <span class="flex items-center gap-1.5 pg-small text-pg-text-soft">
+      <StatusGlyph state={indexGlyph} small />
+      {ragState.status.vectors_indexed ? 'Indexed' : indexing ? 'Indexing' : 'Not indexed'}
+    </span>
+  </div>
 
   {#if $expandedSection === 'rag'}
-    <div class="space-y-3 p-3 bg-neutral-800/30 rounded-lg">
-      <!-- Docs Status -->
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          <span
-            class="w-2 h-2 rounded-full {ragState.status.docs_available ? 'bg-green-500' : isDownloadingDocs ? 'bg-yellow-500 animate-pulse' : 'bg-neutral-500'}"
-          ></span>
-          <span class="text-xs text-neutral-400">Svelte 5 Docs</span>
-          {#if ragState.status.docs_available}
-            <span class="text-xs text-neutral-500">({ragState.status.docs_count} files)</span>
-          {:else if isDownloadingDocs}
-            <span class="text-xs text-yellow-400">Downloading...</span>
-          {:else}
-            <span class="text-xs text-neutral-500">Not downloaded</span>
-          {/if}
-        </div>
+    <div class="mt-3 flex flex-col gap-3 border-t border-pg-border-soft pt-3">
+      <div class="flex items-center justify-between gap-2">
+        <p class="m-0 flex items-center gap-2 pg-small">
+          <StatusGlyph state={docsGlyph} small />
+          <span>Svelte 5 docs</span>
+          <span class="pg-muted">
+            {#if ragState.status.docs_available}
+              {ragState.status.docs_count} files
+            {:else if isDownloadingDocs}
+              Downloading...
+            {:else}
+              Not downloaded
+            {/if}
+          </span>
+        </p>
         {#if !ragState.status.docs_available && !isDownloadingDocs}
-          <button type="button"
-            onclick={downloadDocs}
-            class="px-2 py-1 bg-blue-600 hover:bg-blue-500 rounded text-xs transition-colors"
-          >
-            Download
-          </button>
+          <button type="button" onclick={downloadDocs} class="pg-btn pg-btn-sm">Download</button>
         {/if}
       </div>
 
-      <!-- Vector Index Status -->
-      <div class="space-y-2">
-        <div class="flex items-center gap-2">
-          <span
-            class="w-2 h-2 rounded-full {ragState.status.vectors_indexed
-              ? 'bg-green-500'
-              : ragState.isIndexing || isIndexingWithSwitch
-                ? 'bg-yellow-500 animate-pulse'
-                : 'bg-neutral-500'}"
-          ></span>
-          <span class="text-xs text-neutral-400">Vector Index</span>
-          {#if ragState.status.vectors_indexed}
-            <span class="text-xs text-neutral-500">({ragState.status.vectors_count} docs)</span>
-          {:else if ragState.isIndexing || isIndexingWithSwitch}
-            <span class="text-xs text-yellow-400">Indexing...</span>
-          {:else}
-            <span class="text-xs text-neutral-500">Not indexed</span>
-          {/if}
-        </div>
+      <div class="flex flex-col gap-2">
+        <p class="m-0 flex items-center gap-2 pg-small">
+          <StatusGlyph state={indexGlyph} small />
+          <span>Vector index</span>
+          <span class="pg-muted">
+            {#if ragState.status.vectors_indexed}
+              {ragState.status.vectors_count} docs
+            {:else if indexing}
+              Indexing...
+            {:else}
+              Not indexed
+            {/if}
+          </span>
+        </p>
 
-        <!-- Progress bar during indexing -->
-        {#if (ragState.isIndexing || isIndexingWithSwitch) && ragState.indexingProgress}
-          <div class="space-y-1">
-            <div class="h-1.5 bg-neutral-700 rounded-full overflow-hidden">
-              <div
-                class="h-full bg-blue-500 transition-all duration-300"
-                style="width: {progressPercent}%"
-              ></div>
+        {#if indexing && ragState.indexingProgress}
+          <div class="flex flex-col gap-1">
+            <div class="pg-meter" aria-hidden="true">
+              <i class="pg-meter-accent" style="width: {progressPercent}%"></i>
             </div>
-            <div class="flex justify-between text-[10px] text-neutral-500">
+            <div class="flex justify-between gap-2 pg-muted pg-small">
               <span>{ragState.indexingProgress.status}</span>
               {#if ragState.indexingProgress.total > 0}
-                <span>{ragState.indexingProgress.current}/{ragState.indexingProgress.total}</span>
+                <span class="pg-mono">{ragState.indexingProgress.current}/{ragState.indexingProgress.total}</span>
               {/if}
             </div>
           </div>
         {/if}
       </div>
 
-      <!-- Mode indicator when in VLM mode -->
       {#if needsModeSwitch && canIndexWithSwitch}
-        <div class="text-xs text-amber-400 bg-amber-900/20 border border-amber-800/50 rounded p-2">
+        <p class="m-0 flex items-center gap-2 pg-muted pg-small">
+          <StatusGlyph state="warn" small />
           Server will temporarily switch to embedding mode during indexing
-        </div>
+        </p>
       {/if}
 
-      <!-- Error display -->
       {#if ragState.error}
-        <div class="text-xs text-red-400 bg-red-900/20 border border-red-800/50 rounded p-2">
-          {ragState.error}
-        </div>
+        <p class="m-0 pg-muted pg-small" role="alert">{ragState.error}</p>
       {/if}
 
-      <!-- Index buttons -->
-      <div class="space-y-2">
+      <div class="flex flex-col gap-2">
         {#if configState.config.models.embedding_model_path}
-          <!-- Primary: Index with automatic mode switching -->
-          <button type="button"
-            onclick={indexWithSwitch}
-            disabled={!canIndexWithSwitch}
-            class="w-full px-2 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-700 disabled:text-neutral-500 rounded text-xs transition-colors"
-          >
-            {#if ragState.isIndexing || isIndexingWithSwitch}
-              Indexing...
-            {:else if ragState.status.vectors_indexed}
-              Re-index (Sidecar)
-            {:else}
-              Index Now
-            {/if}
-          </button>
+          <div>
+            <button
+              type="button"
+              onclick={indexWithSwitch}
+              disabled={!canIndexWithSwitch}
+              class="pg-btn pg-btn-primary"
+            >
+              {#if indexing}
+                Indexing...
+              {:else if ragState.status.vectors_indexed}
+                Re-index (Sidecar)
+              {:else}
+                Index now
+              {/if}
+            </button>
+          </div>
         {/if}
 
-        <!-- Toggle for external embedding server option -->
-        <button type="button"
-          class="w-full text-left text-[10px] text-neutral-600 hover:text-neutral-500 transition-colors"
+        <button
+          type="button"
+          class="flex items-center gap-1.5 self-start text-left pg-small text-pg-text-soft hover:text-pg-text-bright"
+          aria-expanded={useExternalEmbedding}
           onclick={() => (useExternalEmbedding = !useExternalEmbedding)}
         >
-          {useExternalEmbedding ? '▼' : '▶'} Use external embedding server
+          <span class="pg-muted text-[11px]" aria-hidden="true">{useExternalEmbedding ? '▾' : '▸'}</span>
+          Use external embedding server
         </button>
 
         {#if useExternalEmbedding}
-          <div class="space-y-2 pl-2 border-l-2 border-neutral-700">
+          <div class="flex flex-col gap-2 border-l-2 border-pg-border pl-3">
+            <label for="rag-embedding-server-url" class="pg-fl">Embedding server URL</label>
             <div class="flex gap-2">
               <input
+                id="rag-embedding-server-url"
                 type="text"
                 bind:value={embeddingUrl}
                 placeholder="http://127.0.0.1:8081"
-                class="flex-1 bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-xs text-neutral-200 focus:outline-none focus:border-neutral-500"
+                class="pg-field pg-mono min-w-0 flex-1"
               />
-              <button type="button"
-                onclick={testExternalServer}
-                disabled={isTestingServer}
-                class="px-2 py-1 bg-neutral-700 hover:bg-neutral-600 disabled:bg-neutral-800 disabled:text-neutral-500 rounded text-xs transition-colors"
-              >
-                {isTestingServer ? '...' : 'Test'}
+              <button type="button" onclick={testExternalServer} disabled={isTestingServer} class="pg-btn">
+                {isTestingServer ? 'Testing...' : 'Test'}
               </button>
             </div>
 
             {#if ragState.status.vectorizer_available}
-              <div class="flex items-center gap-2 text-xs text-green-400">
-                <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+              <p class="m-0 flex items-center gap-2 pg-small">
+                <StatusGlyph state="succeeded" small />
                 Connected
+              </p>
+              <div>
+                <button type="button" onclick={indexExternal} disabled={!canIndexExternal} class="pg-btn">
+                  Index with external server
+                </button>
               </div>
-              <button type="button"
-                onclick={indexExternal}
-                disabled={!canIndexExternal}
-                class="w-full px-2 py-1.5 bg-neutral-700 hover:bg-neutral-600 disabled:bg-neutral-800 disabled:text-neutral-500 rounded text-xs transition-colors"
-              >
-                Index with External Server
-              </button>
             {/if}
           </div>
         {/if}
       </div>
 
-      <!-- Clear cache -->
-      {#if ragState.status.vectors_indexed}
-        <button type="button"
-          onclick={clearCache}
-          class="w-full px-2 py-1.5 bg-neutral-700 hover:bg-neutral-600 rounded text-xs transition-colors"
-        >
-          Clear Index Cache
-        </button>
+      {#if ragState.status.vectors_indexed || ragState.status.docs_available}
+        <div class="flex flex-wrap gap-2">
+          {#if ragState.status.vectors_indexed}
+            <button type="button" onclick={clearCache} class="pg-btn">Clear index cache</button>
+          {/if}
+          {#if ragState.status.docs_available}
+            <button type="button" onclick={openChunkPreview} class="pg-btn">Preview chunks</button>
+          {/if}
+        </div>
       {/if}
 
-      <!-- Chunk Preview button -->
-      {#if ragState.status.docs_available}
-        <button type="button"
-          onclick={openChunkPreview}
-          class="w-full px-2 py-1.5 bg-neutral-700 hover:bg-neutral-600 rounded text-xs transition-colors flex items-center justify-center gap-2"
-        >
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
-          </svg>
-          Preview Chunks
-        </button>
-      {/if}
-
-      <!-- Help text -->
       {#if !configState.config.models.embedding_model_path && !ragState.status.vectorizer_available}
-        <p class="text-[10px] text-neutral-600 leading-relaxed">
-          Configure an embedding model in Model Configuration, or connect to an external embedding
+        <p class="m-0 pg-muted pg-small">
+          Configure an embedding model in Model configuration, or connect to an external embedding
           server to enable RAG search.
         </p>
       {/if}
     </div>
   {:else}
-    <!-- Collapsed summary -->
-    <div class="flex items-center gap-3 text-xs text-neutral-500">
-      <div class="flex items-center gap-1">
-        <span
-          class="w-1.5 h-1.5 rounded-full {ragState.status.docs_available ? 'bg-green-500' : 'bg-neutral-600'}"
-        ></span>
-        <span>Docs</span>
-      </div>
-      <div class="flex items-center gap-1">
-        <span
-          class="w-1.5 h-1.5 rounded-full {ragState.status.vectors_indexed
-            ? 'bg-green-500'
-            : ragState.isIndexing || isIndexingWithSwitch
-              ? 'bg-yellow-500 animate-pulse'
-              : 'bg-neutral-600'}"
-        ></span>
-        <span>RAG</span>
-      </div>
-      {#if ragState.status.vectors_indexed}
-        <span class="text-neutral-600">({ragState.status.vectors_count})</span>
-      {/if}
-    </div>
+    <p class="m-0 mt-1 flex items-center gap-3 pg-muted pg-small">
+      <span>Docs {ragState.status.docs_available ? 'downloaded' : 'not downloaded'}</span>
+      <span>
+        RAG {ragState.status.vectors_indexed
+          ? `indexed (${ragState.status.vectors_count})`
+          : indexing
+            ? 'indexing'
+            : 'not indexed'}
+      </span>
+    </p>
   {/if}
-</div>
+</section>

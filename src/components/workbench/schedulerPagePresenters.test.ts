@@ -7,23 +7,16 @@ import type {
   SchedulerTimelineProjectionRecord,
 } from '../../services/diagnostics/types.ts';
 import {
-  buildSchedulerEstimateRows,
   buildSchedulerRetentionSummaryRows,
   buildSchedulerTimelineAttemptRows,
-  buildSchedulerRunListQuery,
   filterSchedulerTimelineEvents,
   filterAndSortSchedulerRuns,
   formatSchedulerAcceptedDateLabel,
   formatSchedulerDevicePlacementLabel,
-  formatSchedulerEstimateDuration,
   formatSchedulerPlacementLabel,
   formatSchedulerModelCacheState,
   formatSchedulerPolicyLabel,
-  formatSchedulerPriority,
-  formatSchedulerQueuePosition,
   formatSchedulerProjectionFreshness,
-  formatSchedulerEstimateLabel,
-  formatSchedulerReasonLabel,
   formatSchedulerRetentionLabel,
   formatSchedulerRetentionStateLabel,
   formatSchedulerRuntimePlacementLabel,
@@ -31,7 +24,6 @@ import {
   formatSchedulerStatusLabel,
   formatSchedulerTimelineKind,
   formatSchedulerTimelineSource,
-  formatSchedulerDuration,
   formatSchedulerTimestamp,
   schedulerAcceptedDateFilterOptions,
   schedulerBucketFilterOptions,
@@ -51,8 +43,36 @@ import {
   schedulerTimelinePayloadLabel,
   schedulerTimelineKindFilterOptions,
   schedulerTimelineSourceFilterOptions,
-  schedulerStatusClass,
+  buildSchedulerFilterFields,
+  buildSchedulerQueueSummary,
+  buildSchedulerStatusSegments,
+  filterSchedulerRunsBySegment,
+  formatSchedulerClockTime,
+  formatSchedulerRowTime,
+  groupSchedulerRuns,
+  schedulerAdminControlsUnavailableReason,
+  schedulerAppliedFilterChips,
+  schedulerDetailFreshnessText,
+  schedulerEstimateSentence,
+  schedulerFooterState,
+  schedulerQueueControlsUnavailableReason,
+  schedulerResumeUnavailableReason,
+  schedulerRetentionPolicyText,
+  schedulerRetentionText,
+  schedulerRunDetailChips,
+  schedulerRunDetailLine,
+  schedulerRunPlacementText,
+  schedulerRunPolicyText,
+  schedulerRunProgressText,
+  schedulerStatusSegmentForRun,
+  schedulerTimelineAttemptText,
 } from './schedulerPagePresenters.ts';
+import {
+  DEFAULT_SCHEDULER_RUN_FILTERS,
+  SCHEDULER_SECONDARY_FILTER_KEYS,
+  withSchedulerRunFilters,
+} from '../../stores/schedulerRunListStore.ts';
+import { groupRunsForContextPicker } from './shell/runContextPicker.ts';
 
 function run(overrides: Partial<RunListProjectionRecord>): RunListProjectionRecord {
   return {
@@ -114,29 +134,13 @@ function timelineEvent(
   };
 }
 
-test('scheduler timestamp and duration presenters keep pending states visible', () => {
+test('scheduler timestamp and status presenters keep pending states visible', () => {
   assert.equal(formatSchedulerTimestamp(null), 'Unscheduled');
-  assert.equal(formatSchedulerDuration(null, 'future'), 'Pending');
-  assert.equal(formatSchedulerDuration(null, 'scheduled'), 'Pending');
-  assert.equal(formatSchedulerDuration(null, 'queued'), 'Pending');
-  assert.equal(formatSchedulerDuration(null, 'delayed'), 'Pending');
-  assert.equal(formatSchedulerDuration(null, 'running'), 'Running');
-  assert.equal(formatSchedulerDuration(500, 'completed'), '500 ms');
-  assert.equal(formatSchedulerDuration(1_500, 'completed'), '1.5 s');
-});
-
-test('schedulerStatusClass maps run statuses to stable classes', () => {
-  assert.match(schedulerStatusClass('completed'), /emerald/);
-  assert.match(schedulerStatusClass('running'), /cyan/);
-  assert.match(schedulerStatusClass('future'), /amber/);
-  assert.match(schedulerStatusClass('scheduled'), /amber/);
-  assert.match(schedulerStatusClass('queued'), /amber/);
-  assert.match(schedulerStatusClass('delayed'), /orange/);
-  assert.match(schedulerStatusClass('failed'), /red/);
-  assert.match(schedulerStatusClass('cancelled'), /neutral/);
   assert.equal(formatSchedulerStatusLabel('future'), 'Future');
   assert.equal(formatSchedulerStatusLabel('scheduled'), 'Scheduled');
   assert.equal(formatSchedulerStatusLabel('cancelled'), 'Cancelled');
+  assert.equal(formatSchedulerModelCacheState('cache_miss'), 'Model cache miss');
+  assert.equal(formatSchedulerModelCacheState(null), 'Unavailable');
 });
 
 test('scheduler policy presenters keep missing dense table facts explicit', () => {
@@ -169,30 +173,6 @@ test('scheduler policy presenters keep missing dense table facts explicit', () =
   assert.equal(formatSchedulerAcceptedDateLabel(null), 'Unassigned');
 });
 
-test('scheduler queue and estimate presenters keep unavailable facts explicit', () => {
-  assert.equal(formatSchedulerQueuePosition(0), '0');
-  assert.equal(formatSchedulerQueuePosition(null), 'Unassigned');
-  assert.equal(formatSchedulerPriority(5), '5');
-  assert.equal(formatSchedulerPriority(undefined), 'Default');
-  assert.equal(
-    formatSchedulerEstimateLabel(
-      run({
-        estimate_confidence: 'low',
-        estimated_queue_wait_ms: 1_500,
-        estimated_duration_ms: 2_500,
-      }),
-    ),
-    'wait 1.5 s / run 2.5 s (low)',
-  );
-  assert.equal(formatSchedulerEstimateLabel(run({ estimate_confidence: 'low' })), 'low confidence');
-  assert.equal(formatSchedulerEstimateLabel(run({})), 'Unavailable');
-  assert.equal(formatSchedulerEstimateDuration(null), 'Unavailable');
-  assert.equal(formatSchedulerEstimateDuration(750), '750 ms');
-  assert.equal(formatSchedulerEstimateDuration(1_500), '1.5 s');
-  assert.equal(formatSchedulerReasonLabel('warm_session_reused'), 'warm_session_reused');
-  assert.equal(formatSchedulerReasonLabel(''), 'Unavailable');
-});
-
 test('scheduler dependency-readiness resume presenter uses backend typed state', () => {
   assert.equal(
     schedulerRunSupportsDependencyReadinessResume(
@@ -223,41 +203,6 @@ test('scheduler dependency-readiness resume presenter uses backend typed state',
     ),
     false,
   );
-});
-
-test('buildSchedulerEstimateRows exposes selected-run estimate projection facts', () => {
-  assert.deepEqual(buildSchedulerEstimateRows(null), [
-    { label: 'Confidence', value: 'Unavailable' },
-    { label: 'Queue Wait', value: 'Unavailable' },
-    { label: 'Run Duration', value: 'Unavailable' },
-    { label: 'Model Cache', value: 'Unavailable' },
-    { label: 'Policy', value: 'Unassigned', mono: true },
-    { label: 'Updated', value: 'Unavailable' },
-  ]);
-
-  const rows = buildSchedulerEstimateRows({
-    workflow_run_id: 'run-a',
-    workflow_id: 'workflow-a',
-    workflow_version_id: 'wfver-a',
-    workflow_semantic_version: '1.0.0',
-    scheduler_policy_id: 'policy-a',
-    latest_estimate_json: '{}',
-    estimate_confidence: 'medium',
-    estimated_queue_wait_ms: 1_500,
-    estimated_duration_ms: 2_500,
-    model_cache_state: 'cache_hit',
-    last_event_seq: 7,
-    last_updated_at_ms: 86_400_000,
-  });
-
-  assert.equal(rows.find((row) => row.label === 'Confidence')?.value, 'medium');
-  assert.equal(rows.find((row) => row.label === 'Queue Wait')?.value, '1.5 s');
-  assert.equal(rows.find((row) => row.label === 'Run Duration')?.value, '2.5 s');
-  assert.equal(rows.find((row) => row.label === 'Model Cache')?.value, 'Model cache hit');
-  assert.equal(rows.find((row) => row.label === 'Policy')?.value, 'policy-a');
-  assert.equal(rows.find((row) => row.label === 'Updated')?.value, new Date(86_400_000).toLocaleString());
-  assert.equal(formatSchedulerModelCacheState('cache_miss'), 'Model cache miss');
-  assert.equal(formatSchedulerModelCacheState(null), 'Unavailable');
 });
 
 test('buildSchedulerRetentionSummaryRows formats typed retention projection counts', () => {
@@ -306,6 +251,7 @@ test('filterAndSortSchedulerRuns filters by status and search text', () => {
 
   const filtered = filterAndSortSchedulerRuns(runs, {
     search: 'caption',
+    statusSegment: 'all',
     status: 'queued',
     schedulerPolicy: 'all',
     retentionPolicy: 'all',
@@ -339,6 +285,7 @@ test('filterAndSortSchedulerRuns searches client scope facts', () => {
   assert.deepEqual(
     filterAndSortSchedulerRuns(runs, {
       search: 'bucket-side',
+      statusSegment: 'all',
       status: 'all',
       schedulerPolicy: 'all',
       retentionPolicy: 'all',
@@ -367,6 +314,7 @@ test('filterAndSortSchedulerRuns searches selected runtime variant facts', () =>
   assert.deepEqual(
     filterAndSortSchedulerRuns(runs, {
       search: 'llama_cpp.cuda',
+      statusSegment: 'all',
       status: 'all',
       schedulerPolicy: 'all',
       retentionPolicy: 'all',
@@ -396,6 +344,7 @@ test('filterAndSortSchedulerRuns sorts by operational fields', () => {
   assert.deepEqual(
     filterAndSortSchedulerRuns(runs, {
       search: '',
+      statusSegment: 'all',
       status: 'all',
       schedulerPolicy: 'all',
       retentionPolicy: 'all',
@@ -416,6 +365,7 @@ test('filterAndSortSchedulerRuns sorts by operational fields', () => {
   assert.deepEqual(
     filterAndSortSchedulerRuns(runs, {
       search: '',
+      statusSegment: 'all',
       status: 'all',
       schedulerPolicy: 'all',
       retentionPolicy: 'all',
@@ -498,6 +448,7 @@ test('scheduler policy filters use explicit projection labels', () => {
   assert.deepEqual(
     filterAndSortSchedulerRuns(runs, {
       search: '',
+      statusSegment: 'all',
       status: 'all',
       schedulerPolicy: 'policy-a',
       retentionPolicy: 'Unassigned',
@@ -612,67 +563,355 @@ test('scheduler timeline filters use typed event kind and source fields', () => 
   );
 });
 
-test('buildSchedulerRunListQuery sends backend-supported filters only', () => {
+
+// --- Redesigned layout -------------------------------------------------------
+
+const ALL_STATUSES: RunListProjectionRecord['status'][] = [
+  'accepted',
+  'future',
+  'scheduled',
+  'queued',
+  'delayed',
+  'running',
+  'completed',
+  'failed',
+  'cancelled',
+];
+
+function localMs(hours: number, minutes: number, seconds = 0, day = 3): number {
+  return new Date(2026, 10, day, hours, minutes, seconds).getTime();
+}
+
+test('status segments agree with the picker groups and have no memory-wait bucket (WR-004)', () => {
+  const nowMs = localMs(20, 0);
+  for (const status of ALL_STATUSES) {
+    const record = run({ workflow_run_id: `run-${status}`, status, completed_at_ms: localMs(19, 0) });
+    const [group] = groupRunsForContextPicker([record], { query: '', selectedRunId: null, nowMs });
+    const segment = schedulerStatusSegmentForRun(record);
+    if (group.id === 'running') assert.equal(segment, 'active', status);
+    else if (group.id === 'queued') assert.equal(segment, 'queued', status);
+    else assert.equal(segment, status === 'failed' ? 'failed' : 'done', status);
+  }
+
+  const pool = ALL_STATUSES.map((status) => run({ workflow_run_id: `run-${status}`, status }));
   assert.deepEqual(
-    buildSchedulerRunListQuery(
-      {
-        search: 'caption',
-        status: 'queued',
-        schedulerPolicy: 'policy-a',
-        retentionPolicy: 'retention-a',
-        client: 'client-a',
-        clientSession: 'session-a',
-        bucket: 'bucket-a',
-        selectedRuntime: 'runtime-a',
-        selectedRuntimeVariant: 'runtime_a.cuda',
-        selectedBackend: 'llama_cpp',
-        selectedDeviceClass: 'cuda',
-        selectedDevice: 'device-a',
-        selectedNetworkNode: 'network-node-a',
-        acceptedDate: '1970-01-02',
-        sort: 'workflow_asc',
-      },
-      250,
-    ),
-    {
-      limit: 250,
-      status: 'queued',
-      scheduler_policy_id: 'policy-a',
-      retention_policy_id: 'retention-a',
-      client_id: 'client-a',
-      client_session_id: 'session-a',
-      bucket_id: 'bucket-a',
-      selected_runtime_id: 'runtime-a',
-      selected_runtime_variant_id: 'runtime_a.cuda',
-      selected_backend_key: 'llama_cpp',
-      selected_device_class: 'cuda',
-      selected_device_id: 'device-a',
-      selected_network_node_id: 'network-node-a',
-      accepted_at_from_ms: 86_400_000,
-      accepted_at_to_ms: 172_799_999,
-    },
+    buildSchedulerStatusSegments(pool).map((option) => [option.value, option.label, option.count]),
+    [
+      ['all', 'All', 9],
+      ['active', 'Active', 1],
+      ['queued', 'Queued', 5],
+      ['done', 'Done', 2],
+      ['failed', 'Failed', 1],
+    ],
   );
   assert.deepEqual(
-    buildSchedulerRunListQuery(
-      {
-        search: 'caption',
-        status: 'all',
-        schedulerPolicy: 'Unassigned',
-        retentionPolicy: 'all',
-        client: 'Unassigned',
-        clientSession: 'all',
-        bucket: 'all',
-        selectedRuntime: 'Unassigned',
-        selectedRuntimeVariant: 'Unassigned',
-        selectedBackend: 'Unassigned',
-        selectedDeviceClass: 'Unassigned',
-        selectedDevice: 'all',
-        selectedNetworkNode: 'all',
-        acceptedDate: 'all',
-        sort: 'workflow_asc',
-      },
-      50,
+    filterSchedulerRunsBySegment(pool, 'done').map((record) => record.status),
+    ['completed', 'cancelled'],
+  );
+  assert.equal(filterSchedulerRunsBySegment(pool, 'all').length, 9);
+});
+
+test('groupSchedulerRuns uses the picker grouping and keeps the Sort order inside groups', () => {
+  const nowMs = localMs(20, 0);
+  const sorted = [
+    run({ workflow_run_id: 'run-q3', status: 'queued', scheduler_queue_position: 3, last_updated_at_ms: localMs(19, 59) }),
+    run({
+      workflow_run_id: 'run-delayed',
+      status: 'delayed',
+      scheduler_reason: 'needs 8 GB on cuda:0',
+      selected_runtime_id: null,
+      selected_device_id: null,
+      last_updated_at_ms: localMs(19, 58),
+    }),
+    run({
+      workflow_run_id: 'run-live',
+      status: 'running',
+      started_at_ms: localMs(19, 30),
+      last_updated_at_ms: localMs(19, 57),
+    }),
+    run({ workflow_run_id: 'run-q1', status: 'queued', scheduler_queue_position: 1, last_updated_at_ms: localMs(19, 56) }),
+    run({
+      workflow_run_id: 'run-old',
+      status: 'completed',
+      completed_at_ms: localMs(18, 0, 0, 2),
+      last_updated_at_ms: localMs(18, 0, 0, 2),
+    }),
+  ];
+
+  const groups = groupSchedulerRuns(sorted, { selectedRunId: 'run-q1', nowMs });
+
+  assert.deepEqual(
+    groups.map((group) => [group.title, group.rows.map((row) => row.runId)]),
+    [
+      ['Running', ['run-live']],
+      ['Queued', ['run-q3', 'run-delayed', 'run-q1']],
+      ['Finished earlier', ['run-old']],
+    ],
+  );
+  const queued = groups[1].rows;
+  assert.equal(queued[1].contextSuffix, ', needs 8 GB on cuda:0');
+  assert.equal(queued[1].detail, null);
+  assert.equal(queued[0].contextSuffix, ', #3 in queue');
+  assert.equal(queued[0].detail, 'runtime-a on device-a');
+  assert.equal(queued[0].time, '19:59');
+  assert.equal(queued[2].selected, true);
+  assert.equal(queued[0].selected, false);
+  assert.equal(groups[0].rows[0].detail, 'Started 19:30');
+  assert.equal(groups[2].rows[0].time, 'Nov 2');
+});
+
+test('row time and detail presenters stay short', () => {
+  const startOfToday = localMs(0, 0);
+  assert.equal(formatSchedulerRowTime(localMs(9, 5), startOfToday), '09:05');
+  assert.equal(formatSchedulerRowTime(localMs(9, 5, 0, 1), startOfToday), 'Nov 1');
+  assert.equal(formatSchedulerClockTime(localMs(9, 5, 7)), '09:05:07');
+  assert.equal(schedulerRunDetailLine(run({ status: 'running', started_at_ms: null })), null);
+  assert.equal(
+    schedulerRunDetailLine(run({ status: 'queued', selected_device_id: null })),
+    'runtime-a, device not assigned yet',
+  );
+  assert.equal(
+    schedulerRunDetailLine(run({ status: 'queued', selected_runtime_id: null, selected_device_id: null })),
+    null,
+  );
+});
+
+test('buildSchedulerQueueSummary reads run-list estimates and degrades to a count', () => {
+  const loaded = { loaded: true, loading: false, unreachable: false };
+  assert.equal(
+    buildSchedulerQueueSummary([run({ status: 'queued' }), run({ status: 'delayed' })], loaded),
+    '2 runs waiting',
+  );
+  assert.equal(
+    buildSchedulerQueueSummary(
+      [
+        run({ status: 'running', selected_device_id: 'cuda:0' }),
+        run({ status: 'queued', estimated_duration_ms: 600_000, selected_device_id: 'cuda:1' }),
+        run({ status: 'queued', estimated_duration_ms: 420_000, selected_device_id: null }),
+        run({ status: 'completed', estimated_duration_ms: 999_000, selected_device_id: 'cuda:9' }),
+      ],
+      loaded,
     ),
-    { limit: 50 },
+    '2 runs waiting, about 17 min of queued work on 2 devices',
+  );
+  assert.equal(
+    buildSchedulerQueueSummary(
+      [
+        run({ status: 'queued', estimated_duration_ms: 30_000, selected_device_id: null }),
+        run({ status: 'queued', estimated_duration_ms: null, selected_device_id: null }),
+      ],
+      loaded,
+    ),
+    '2 runs waiting, under a minute of queued work (estimated for 1 of them)',
+  );
+  assert.equal(buildSchedulerQueueSummary([run({ status: 'queued' })], loaded), '1 run waiting');
+  assert.equal(buildSchedulerQueueSummary([run({ status: 'running' })], loaded), 'No runs waiting, 1 running');
+  assert.equal(buildSchedulerQueueSummary([], loaded), 'No runs waiting');
+  assert.equal(
+    buildSchedulerQueueSummary([], { loaded: false, loading: true, unreachable: false }),
+    'Loading runs',
+  );
+  assert.equal(
+    buildSchedulerQueueSummary([], { loaded: false, loading: false, unreachable: true }),
+    'Run list unavailable, the engine did not answer',
+  );
+});
+
+test('buildSchedulerFilterFields lists the fourteen disclosure selects with stable options', () => {
+  const runs = [
+    run({ workflow_run_id: 'run-a', scheduler_policy_id: 'fifo' }),
+    run({ workflow_run_id: 'run-b', scheduler_policy_id: null }),
+  ];
+  const filters = withSchedulerRunFilters(DEFAULT_SCHEDULER_RUN_FILTERS, {
+    selectedDevice: 'cuda:7',
+    status: 'delayed',
+  });
+  const fields = buildSchedulerFilterFields(runs, filters);
+
+  assert.deepEqual(
+    fields.map((field) => field.key),
+    SCHEDULER_SECONDARY_FILTER_KEYS,
+  );
+  assert.equal(new Set(fields.map((field) => field.id)).size, 14);
+  const status = fields.find((field) => field.key === 'status');
+  assert.equal(status?.value, 'delayed');
+  assert.deepEqual(status?.options.slice(0, 2), [
+    { value: 'all', label: 'All' },
+    { value: 'accepted', label: 'Accepted' },
+  ]);
+  const sort = fields.find((field) => field.key === 'sort');
+  assert.deepEqual(sort?.options.map((option) => option.label), ['Updated', 'Queued', 'Duration', 'Workflow', 'Status']);
+  const policy = fields.find((field) => field.key === 'schedulerPolicy');
+  assert.deepEqual(policy?.options.map((option) => option.value), ['all', 'Unassigned', 'fifo']);
+  const device = fields.find((field) => field.key === 'selectedDevice');
+  assert.deepEqual(device?.options.map((option) => option.value), ['all', 'device-a', 'cuda:7']);
+});
+
+test('schedulerAppliedFilterChips names each non-default disclosure filter', () => {
+  assert.deepEqual(schedulerAppliedFilterChips(DEFAULT_SCHEDULER_RUN_FILTERS), []);
+  const filters = withSchedulerRunFilters(DEFAULT_SCHEDULER_RUN_FILTERS, {
+    search: 'ignored',
+    statusSegment: 'failed',
+    status: 'failed',
+    sort: 'duration_desc',
+    selectedNetworkNode: 'local',
+  });
+  assert.deepEqual(schedulerAppliedFilterChips(filters), [
+    { key: 'status', label: 'Status: Failed' },
+    { key: 'sort', label: 'Sort: Duration' },
+    { key: 'selectedNetworkNode', label: 'Network node: local' },
+  ]);
+});
+
+test('detail presenters describe progress, placement and retention from projection facts', () => {
+  assert.equal(
+    schedulerRunProgressText(run({ status: 'running', started_at_ms: localMs(20, 1, 40) })),
+    'Running since 20:01:40',
+  );
+  assert.equal(
+    schedulerRunProgressText(run({ status: 'queued', scheduler_queue_position: 2, scheduler_reason: 'model cached' })),
+    'Queue position 2, model cached',
+  );
+  assert.equal(schedulerRunProgressText(run({ status: 'scheduled' })), 'Scheduled');
+  assert.equal(schedulerRunProgressText(run({ status: 'delayed', scheduler_reason: 'waiting on cuda:0' })), 'Delayed: waiting on cuda:0');
+  assert.equal(schedulerRunProgressText(run({ status: 'completed', duration_ms: 38_000 })), 'Finished in 38 s');
+  assert.equal(
+    schedulerRunProgressText(run({ status: 'failed', latest_error_message: 'out of memory' })),
+    'Failed: out of memory',
+  );
+  assert.equal(schedulerRunProgressText(run({ status: 'cancelled', duration_ms: 70_000 })), 'Cancelled after 1m 10s');
+
+  assert.equal(schedulerRunPlacementText(run({})), 'runtime-a / runtime_a.cuda on cuda / device-a');
+  assert.equal(
+    schedulerRunPlacementText(run({ selected_device_id: null, selected_device_class: null })),
+    'runtime-a / runtime_a.cuda, device not assigned yet',
+  );
+  assert.equal(
+    schedulerRunPlacementText(
+      run({
+        selected_runtime_id: null,
+        selected_runtime_variant_id: null,
+        selected_device_id: null,
+        selected_device_class: null,
+      }),
+    ),
+    'Not assigned to a device yet',
+  );
+  assert.equal(
+    schedulerRunPolicyText(run({})),
+    'Policy policy-a, bucket bucket-a, backend llama_cpp, network node network-node-a',
+  );
+  assert.equal(
+    schedulerRunPolicyText(
+      run({ scheduler_policy_id: null, bucket_id: 'default', selected_backend_key: null, selected_network_node_id: null }),
+    ),
+    'Bucket default',
+  );
+  assert.equal(schedulerRetentionPolicyText(run({})), 'Retention policy retention-a');
+  assert.equal(schedulerRetentionPolicyText(run({ retention_policy_id: null })), 'No retention policy recorded');
+  assert.equal(
+    schedulerRetentionText(
+      [
+        { retention_state: 'metadata_only', artifact_count: 1 },
+        { retention_state: 'retained', artifact_count: 3 },
+      ],
+      { loading: false, error: null },
+    ),
+    'Payload retained: 3, Metadata retained only: 1',
+  );
+  assert.equal(schedulerRetentionText([], { loading: false, error: null }), 'No retained artifacts projected');
+  assert.equal(schedulerRetentionText([], { loading: true, error: null }), 'Loading the artifact summary');
+  assert.equal(
+    schedulerRetentionText([], { loading: false, error: 'Transport error: down' }),
+    'Artifact summary unavailable: Transport error: down',
+  );
+  assert.deepEqual(schedulerRunDetailChips(run({ scheduler_priority: 5, scheduler_queue_position: 1 })), [
+    'runtime-a on device-a',
+    'priority 5',
+    '#1 in queue',
+  ]);
+  assert.deepEqual(
+    schedulerRunDetailChips(run({ selected_runtime_id: null, selected_device_id: null, scheduler_priority: 0 })),
+    [],
+  );
+});
+
+test('schedulerEstimateSentence reads the estimate query and says when it is missing', () => {
+  const estimate = {
+    workflow_run_id: 'run-a',
+    workflow_id: 'workflow-a',
+    estimate_confidence: 'high',
+    estimated_queue_wait_ms: 40_000,
+    estimated_duration_ms: 360_000,
+    model_cache_state: 'cache_hit' as const,
+    last_event_seq: 3,
+    last_updated_at_ms: 1,
+  };
+  assert.equal(
+    schedulerEstimateSentence(estimate, { loading: false, error: null }),
+    'About 40 s queue wait, about 6m 00s to run, high confidence. Model cache hit.',
+  );
+  assert.equal(
+    schedulerEstimateSentence(
+      { ...estimate, estimated_queue_wait_ms: null, estimated_duration_ms: null, estimate_confidence: null, model_cache_state: 'unknown' },
+      { loading: false, error: null },
+    ),
+    'No duration estimate.',
+  );
+  assert.equal(schedulerEstimateSentence(null, { loading: false, error: null }), 'No scheduler estimate for this run');
+  assert.equal(schedulerEstimateSentence(null, { loading: true, error: null }), 'Loading the scheduler estimate');
+  assert.equal(
+    schedulerEstimateSentence(estimate, { loading: false, error: 'Internal error: boom' }),
+    'Estimate unavailable: Internal error: boom',
+  );
+});
+
+test('footer state and unavailable reasons keep every action reachable but honest', () => {
+  assert.deepEqual(schedulerFooterState(null, null), { kind: 'none' });
+  assert.deepEqual(schedulerFooterState('run-x', null), { kind: 'missing' });
+  assert.deepEqual(schedulerFooterState('run-a', run({ status: 'failed' })), {
+    kind: 'finished',
+    workflowId: 'workflow-a',
+  });
+  const queued = run({ status: 'queued' });
+  assert.deepEqual(schedulerFooterState('run-a', queued), { kind: 'live', run: queued });
+  assert.equal(schedulerFooterState('run-a', run({ status: 'running' })).kind, 'live');
+
+  assert.equal(schedulerQueueControlsUnavailableReason(queued), null);
+  assert.match(schedulerQueueControlsUnavailableReason(run({ status: 'running' })) ?? '', /only while a run is queued/);
+  assert.match(
+    schedulerQueueControlsUnavailableReason(run({ status: 'queued', workflow_execution_session_id: null })) ?? '',
+    /GUI admin actions under More actions/,
+  );
+  assert.equal(schedulerAdminControlsUnavailableReason(run({ status: 'delayed', workflow_execution_session_id: null })), null);
+  assert.match(schedulerAdminControlsUnavailableReason(run({ status: 'running' })) ?? '', /queued or delayed/);
+  assert.equal(
+    schedulerResumeUnavailableReason(run({ workflow_execution_session_resume_state: 'dependency_readiness_pending' })),
+    null,
+  );
+  assert.match(schedulerResumeUnavailableReason(run({})) ?? '', /dependency readiness/);
+});
+
+test('timeline helpers summarise attempts and projection freshness', () => {
+  assert.equal(schedulerTimelineAttemptText(timelineEvent({})), null);
+  assert.equal(
+    schedulerTimelineAttemptText(
+      timelineEvent({ scheduler_attempt_id: 'attempt-1', scheduler_attempt_device_id: 'cuda:0' }),
+    ),
+    'Attempt attempt-1 · Device cuda:0',
+  );
+  assert.equal(
+    schedulerDetailFreshnessText({
+      timeline: {
+        projection_name: 'scheduler_timeline',
+        projection_version: 1,
+        last_applied_event_seq: 41,
+        status: 'current',
+        updated_at_ms: 1,
+      },
+      estimate: null,
+      retention: null,
+    }),
+    'Timeline current at seq 41; estimate projection unavailable; artifacts projection unavailable',
   );
 });

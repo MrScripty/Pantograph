@@ -2,17 +2,21 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  buildCapabilityRows,
   buildDiagnosticsRetentionCleanupRows,
   buildDiagnosticsRetentionPolicyRows,
   buildDiagnosticsRetentionSettingRows,
   buildManagedMediaDependencyRows,
   buildArtifactPolicyRows,
   findFormatOption,
+  formatCapabilityCount,
+  formatCapabilitySummary,
   formatManagedMediaDependencyStatus,
   formatOptionItems,
   formatRangeLabel,
   formatSettingsBytes,
   formatSettingsSeconds,
+  managedMediaDependencyGlyph,
   managedMediaVersionOptions,
   managedMediaVersionStatusLabel,
   optionValuesWithCurrent,
@@ -83,26 +87,26 @@ test('artifact policy rows preserve backend ids and nullable budgets', () => {
     delete_on_consume: true,
   });
 
-  assert.equal(rows.find((row) => row.label === 'Policy')?.value, 'artifact-policy-v1');
-  assert.equal(rows.find((row) => row.label === 'Version')?.value, '3');
-  assert.equal(rows.find((row) => row.label === 'TTL')?.value, '7 days');
-  assert.equal(rows.find((row) => row.label === 'Disk Budget')?.value, 'Unlimited');
-  assert.equal(rows.find((row) => row.label === 'Memory Budget')?.value, '4.0 KiB');
-  assert.equal(rows.find((row) => row.label === 'Delete On Consume')?.value, 'Enabled');
+  assert.equal(rows.find((row) => row.key === 'Policy')?.value, 'artifact-policy-v1');
+  assert.equal(rows.find((row) => row.key === 'Version')?.value, '3');
+  assert.equal(rows.find((row) => row.key === 'TTL')?.value, '7 days');
+  assert.equal(rows.find((row) => row.key === 'Disk budget')?.value, 'Unlimited');
+  assert.equal(rows.find((row) => row.key === 'Memory budget')?.value, '4.0 KiB');
+  assert.equal(rows.find((row) => row.key === 'Delete on consume')?.value, 'Enabled');
 });
 
 test('diagnostics retention policy rows expose global retention settings', () => {
   const policy = diagnosticsRetentionPolicy();
 
   const rows = buildDiagnosticsRetentionPolicyRows(policy);
-  assert.equal(rows.find((row) => row.label === 'Policy')?.value, 'standard-local-v1');
-  assert.equal(rows.find((row) => row.label === 'Version')?.value, '3');
-  assert.equal(rows.find((row) => row.label === 'Days')?.value, '30');
+  assert.equal(rows.find((row) => row.key === 'Policy')?.value, 'standard-local-v1');
+  assert.equal(rows.find((row) => row.key === 'Version')?.value, '3');
+  assert.equal(rows.find((row) => row.key === 'Days')?.value, '30');
 
   const settingRows = buildDiagnosticsRetentionSettingRows(policy);
-  assert.equal(settingRows.find((row) => row.label === 'Final Outputs')?.value, '30 days, Retain Payload Reference');
-  assert.equal(settingRows.find((row) => row.label === 'Intermediate Node I/O')?.value, '14 days, Metadata Only');
-  assert.equal(settingRows.find((row) => row.label === 'Cleanup Trigger')?.value, 'Manual Or Maintenance');
+  assert.equal(settingRows.find((row) => row.key === 'Final outputs')?.value, '30 days, Retain payload reference');
+  assert.equal(settingRows.find((row) => row.key === 'Intermediate node I/O')?.value, '14 days, Metadata only');
+  assert.equal(settingRows.find((row) => row.key === 'Cleanup trigger')?.value, 'Manual or maintenance');
 });
 
 test('diagnostics retention cleanup rows expose backend cleanup result', () => {
@@ -115,11 +119,11 @@ test('diagnostics retention cleanup rows expose backend cleanup result', () => {
     last_event_seq: 44,
   });
 
-  assert.equal(rows.find((row) => row.label === 'Policy')?.value, 'standard-local-v1');
-  assert.equal(rows.find((row) => row.label === 'Version')?.value, '4');
-  assert.match(rows.find((row) => row.label === 'Cutoff')?.value ?? '', /1970/);
-  assert.equal(rows.find((row) => row.label === 'Expired')?.value, '12');
-  assert.equal(rows.find((row) => row.label === 'Last Event Seq')?.value, '44');
+  assert.equal(rows.find((row) => row.key === 'Policy')?.value, 'standard-local-v1');
+  assert.equal(rows.find((row) => row.key === 'Version')?.value, '4');
+  assert.match(rows.find((row) => row.key === 'Cutoff')?.value ?? '', /1970/);
+  assert.equal(rows.find((row) => row.key === 'Expired')?.value, '12');
+  assert.equal(rows.find((row) => row.key === 'Last event seq')?.value, '44');
   assert.deepEqual(buildDiagnosticsRetentionCleanupRows(null), []);
 });
 
@@ -177,19 +181,60 @@ test('managed media dependency presenters expose backend status and version fact
   assert.deepEqual(formatManagedMediaDependencyStatus(dependency), {
     installLabel: 'Installed',
     readinessLabel: 'Ready',
-    categoryLabel: 'Tool Binary',
+    categoryLabel: 'Tool binary',
     packageLabel: 'Archive',
-    statusClass: 'border-emerald-800 bg-emerald-950/40 text-emerald-200',
+    statusGlyph: 'succeeded',
   });
 
   const rows = buildManagedMediaDependencyRows(dependency);
-  assert.equal(rows.find((row) => row.label === 'Source')?.value, 'FFmpeg/FFmpeg');
-  assert.equal(rows.find((row) => row.label === 'Catalog Version')?.value, '7.1');
-  assert.equal(rows.find((row) => row.label === 'Selected')?.value, '7.1');
-  assert.equal(rows.find((row) => row.label === 'Installed Versions')?.value, '1');
+  assert.equal(rows.find((row) => row.key === 'Source')?.value, 'FFmpeg/FFmpeg');
+  assert.equal(rows.find((row) => row.key === 'Catalog version')?.value, '7.1');
+  assert.equal(rows.find((row) => row.key === 'Selected')?.value, '7.1');
+  assert.equal(rows.find((row) => row.key === 'Installed versions')?.value, '1');
 
   assert.deepEqual(managedMediaVersionOptions(dependency), ['7.1']);
   assert.equal(managedMediaVersionStatusLabel(dependency.versions[0]), '7.1 | active | selected');
+});
+
+test('managed media dependency glyph follows readiness and install state', () => {
+  const ready = managedMediaDependencyStatus();
+  assert.equal(managedMediaDependencyGlyph(ready), 'succeeded');
+  assert.equal(
+    managedMediaDependencyGlyph({ ...ready, install_state: 'missing', readiness: 'missing' }),
+    'warn',
+  );
+  assert.equal(
+    managedMediaDependencyGlyph({ ...ready, install_state: 'unsupported', readiness: 'unsupported' }),
+    'idle',
+  );
+  assert.equal(formatManagedMediaDependencyStatus({ ...ready, readiness: 'missing' }).readinessLabel, 'Missing');
+});
+
+test('capability counts and rows read the format capabilities, or zero when unloaded', () => {
+  assert.equal(formatCapabilityCount(undefined), '0 formats');
+  assert.equal(formatCapabilityCount([jpgOption]), '1 format');
+  assert.equal(formatCapabilityCount([jpgOption, oggOption]), '2 formats');
+
+  const capabilities = {
+    image_formats: [jpgOption],
+    audio_formats: [oggOption],
+    video_formats: [],
+    three_d_formats: [jpgOption, oggOption],
+  };
+  assert.equal(
+    formatCapabilitySummary(capabilities),
+    'Image 1 format, audio 1 format, video 0 formats, 3D 2 formats',
+  );
+  assert.deepEqual(buildCapabilityRows(capabilities), [
+    { key: 'Image', value: '1 format', mono: true },
+    { key: 'Audio', value: '1 format', mono: true },
+    { key: 'Video', value: '0 formats', mono: true },
+    { key: '3D', value: '2 formats', mono: true },
+  ]);
+  assert.deepEqual(
+    buildCapabilityRows(null).map((row) => row.value),
+    ['0 formats', '0 formats', '0 formats', '0 formats'],
+  );
 });
 
 function managedMediaDependencyStatus(): WorkflowManagedMediaDependencyStatus {
