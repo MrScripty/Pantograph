@@ -314,7 +314,7 @@ fn test_pytorch_worker_generate_image_request_maps_from_validated_plan() {
 #[test]
 fn test_python_worker_generate_image_contract_projects_planned_kwargs() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_image_contract_module(py);
         let envelope = include_str!(
             "../../tests/fixtures/pytorch_worker_contract/generate_image_request.json"
@@ -372,7 +372,7 @@ fn test_python_worker_generate_image_contract_projects_planned_kwargs() {
 #[test]
 fn test_python_worker_generate_image_batch_contract_projects_member_kwargs() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_image_contract_module(py);
         let envelope = include_str!(
             "../../tests/fixtures/pytorch_worker_contract/generate_image_batch_request.json"
@@ -437,7 +437,7 @@ fn test_python_worker_generate_image_batch_contract_projects_member_kwargs() {
 #[test]
 fn test_python_worker_generate_image_contract_rejects_unknown_payload_fields() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_image_contract_module(py);
         let mut envelope: serde_json::Value = serde_json::from_str(include_str!(
             "../../tests/fixtures/pytorch_worker_contract/generate_image_request.json"
@@ -461,7 +461,7 @@ fn test_python_worker_generate_image_contract_rejects_unknown_payload_fields() {
 #[test]
 fn test_python_worker_generate_image_contract_requires_rust_selected_device() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_image_contract_module(py);
         let mut envelope: serde_json::Value = serde_json::from_str(include_str!(
             "../../tests/fixtures/pytorch_worker_contract/generate_image_request.json"

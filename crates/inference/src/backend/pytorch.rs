@@ -354,7 +354,7 @@ fn init_worker_from_envelope_blocking(
     request_id: &str,
     envelope_json: String,
 ) -> Result<(), BackendError> {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         pytorch_worker::ensure_worker_initialised(py).map_err(|e| {
             PyTorchBackend::init_worker_failure_from_message(
                 request_id,
@@ -473,7 +473,7 @@ fn shutdown_worker_from_envelope_blocking(
     request_id: &str,
     envelope_json: String,
 ) -> Result<(), BackendError> {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         pytorch_worker::ensure_worker_initialised(py).map_err(|e| {
             PyTorchBackend::shutdown_worker_failure_from_message(
                 request_id,
@@ -910,7 +910,7 @@ pub async fn active_loaded_model_info() -> Result<LoadedModelInfo, BackendError>
         ))
     })?;
     tokio::task::spawn_blocking(move || {
-        Python::with_gil(|py| -> Result<LoadedModelInfo, BackendError> {
+        Python::attach(|py| -> Result<LoadedModelInfo, BackendError> {
             let worker = pytorch_worker::worker_module(py).map_err(|e| {
                 kv_worker_failure_from_message(
                     &request_id,
@@ -953,7 +953,7 @@ pub async fn save_live_kv_snapshot(path: &Path) -> Result<PyTorchLiveKvInfo, Bac
         ))
     })?;
     tokio::task::spawn_blocking(move || {
-        Python::with_gil(|py| -> Result<PyTorchLiveKvInfo, BackendError> {
+        Python::attach(|py| -> Result<PyTorchLiveKvInfo, BackendError> {
             let worker = pytorch_worker::worker_module(py).map_err(|e| {
                 kv_worker_failure_from_message(
                     &request_id,
@@ -997,7 +997,7 @@ pub async fn restore_live_kv_snapshot(path: &Path) -> Result<PyTorchLiveKvInfo, 
         ))
     })?;
     tokio::task::spawn_blocking(move || {
-        Python::with_gil(|py| -> Result<PyTorchLiveKvInfo, BackendError> {
+        Python::attach(|py| -> Result<PyTorchLiveKvInfo, BackendError> {
             let worker = pytorch_worker::worker_module(py).map_err(|e| {
                 kv_worker_failure_from_message(
                     &request_id,
@@ -1039,7 +1039,7 @@ pub async fn clear_live_kv_snapshot() -> Result<(), BackendError> {
         ))
     })?;
     tokio::task::spawn_blocking(move || {
-        Python::with_gil(|py| -> Result<(), BackendError> {
+        Python::attach(|py| -> Result<(), BackendError> {
             let worker = pytorch_worker::worker_module(py).map_err(|e| {
                 kv_worker_failure_from_message(
                     &request_id,
@@ -1394,7 +1394,7 @@ impl PyTorchBackend {
         })?;
 
         tokio::task::spawn_blocking(move || {
-            Python::with_gil(|py| -> Result<AudioTranscriptionResult, BackendError> {
+            Python::attach(|py| -> Result<AudioTranscriptionResult, BackendError> {
                 let worker = match &isolated {
                     Some(worker) => worker.module(py),
                     None => pytorch_worker::worker_module(py),
@@ -1451,7 +1451,7 @@ impl PyTorchBackend {
         let envelope = shutdown_worker_envelope_json(&request_id)?;
         self.selected_audio_residency_possible = true;
         tokio::task::spawn_blocking(move || {
-            Python::with_gil(|py| {
+            Python::attach(|py| {
                 let module = worker.module(py).map_err(|error| {
                     Self::shutdown_worker_failure_from_message(&request_id, error.to_string())
                 })?;
@@ -1615,7 +1615,7 @@ impl PyTorchBackend {
         }
 
         let info = tokio::task::spawn_blocking(move || {
-            Python::with_gil(|py| -> Result<LoadedModelInfo, BackendError> {
+            Python::attach(|py| -> Result<LoadedModelInfo, BackendError> {
                 let worker = match &isolated {
                     Some(worker) => worker.module(py),
                     None => pytorch_worker::worker_module(py),
@@ -1815,7 +1815,7 @@ impl PyTorchBackend {
             });
         }
 
-        if let Ok(dict) = token_obj.downcast::<pyo3::types::PyDict>() {
+        if let Ok(dict) = token_obj.cast::<pyo3::types::PyDict>() {
             let text_value = dict.get_item("text").map_err(|error| {
                 Self::stream_worker_failure_from_message(
                     request_id,
@@ -1869,14 +1869,12 @@ impl PyTorchBackend {
         request_id: &str,
         usage_obj: &Bound<'_, PyAny>,
     ) -> Result<Option<InferenceUsage>, BackendError> {
-        let usage_dict = usage_obj
-            .downcast::<pyo3::types::PyDict>()
-            .map_err(|error| {
-                Self::stream_worker_failure_from_message(
-                    request_id,
-                    format!("Token usage extraction failed: {}", error),
-                )
-            })?;
+        let usage_dict = usage_obj.cast::<pyo3::types::PyDict>().map_err(|error| {
+            Self::stream_worker_failure_from_message(
+                request_id,
+                format!("Token usage extraction failed: {}", error),
+            )
+        })?;
         let usage = InferenceUsage {
             prompt_tokens: Self::stream_usage_u32_field(request_id, usage_dict, "prompt_tokens")?,
             completion_tokens: Self::stream_usage_u32_field(
@@ -2303,7 +2301,7 @@ impl PyTorchBackend {
         request_id: &str,
         envelope_json: String,
     ) -> Result<(), BackendError> {
-        Python::with_gil(|py| -> Result<(), BackendError> {
+        Python::attach(|py| -> Result<(), BackendError> {
             let worker = pytorch_worker::worker_module(py).map_err(|e| {
                 Self::unload_worker_failure_from_message(
                     request_id,
@@ -2835,7 +2833,7 @@ impl PyTorchBackend {
 
         let mut stream = self.text_jobs.spawn(move |mut producer| {
             producer.check()?;
-            let text = Python::with_gil(|py| -> Result<String, BackendError> {
+            let text = Python::attach(|py| -> Result<String, BackendError> {
                 let worker = pytorch_worker::worker_module(py).map_err(|e| {
                     Self::generate_text_worker_failure_from_message(
                         &request_id,
@@ -2945,7 +2943,7 @@ impl PyTorchBackend {
 
         let stream = self.text_jobs.spawn(move |mut producer| {
             producer.check()?;
-            Python::with_gil(|py| -> Result<(), BackendError> {
+            Python::attach(|py| -> Result<(), BackendError> {
                 let failure = |error: PyErr| {
                     Self::stream_worker_failure_from_message(&request_id, error.to_string())
                 };
@@ -3043,7 +3041,7 @@ impl InferenceBackend for PyTorchBackend {
 
         // Log the transformers version for diagnostics
         let tf_version = tokio::task::spawn_blocking(|| {
-            Python::with_gil(|py| -> String {
+            Python::attach(|py| -> String {
                 py.import("transformers")
                     .and_then(|m| m.getattr("__version__"))
                     .and_then(|v| v.extract::<String>())
@@ -3481,7 +3479,7 @@ impl InferenceBackend for PyTorchBackend {
         let truncate_result = tokio::task::spawn_blocking({
             let request_id = request_id.clone();
             move || {
-                Python::with_gil(|py| -> Result<PyTorchTruncateKvCacheResult, BackendError> {
+                Python::attach(|py| -> Result<PyTorchTruncateKvCacheResult, BackendError> {
                     let worker = pytorch_worker::worker_module(py).map_err(|e| {
                         kv_truncate_worker_failure_from_message(
                             &request_id,

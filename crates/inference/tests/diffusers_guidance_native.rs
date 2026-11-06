@@ -9,7 +9,7 @@ use pyo3::prelude::*;
 #[test]
 #[ignore = "explicit native qualification requires real CPU Torch and Diffusers"]
 fn actual_cpu_diffusers_guidance_matches_conditional_noise_oracle() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let source = CString::new(
             r#"
 import inspect
@@ -88,7 +88,7 @@ print(f"native_guidance_torch={torch.__version__}; diffusers={diffusers.__versio
 #[test]
 #[ignore = "explicit native qualification requires real CPU Torch and Diffusers"]
 fn actual_cpu_diffusers_multiple_images_match_worker_batch_shape_and_seed_order() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let locals = pyo3::types::PyDict::new(py);
         locals
             .set_item("worker_source", include_str!("../torch/worker.py"))
@@ -142,7 +142,7 @@ print(f'native_image_count_torch={torch.__version__}; diffusers={diffusers.__ver
 #[test]
 #[ignore = "explicit native qualification requires real CPU Torch and Diffusers"]
 fn actual_cpu_diffusers_scheduler_override_matches_explicit_pipeline_without_resident_mutation() {
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module_source = CString::new(include_str!("../torch/worker_diffusion.py")).unwrap();
         let module = pyo3::types::PyModule::from_code(
             py,

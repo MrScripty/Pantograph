@@ -136,7 +136,7 @@ impl Drop for IsolatedAudioWorker {
         }
         // Blocking closures retain an Arc to this registration. Retirement is
         // therefore after their actual completion, including caller loss.
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             if let Ok(sys) = py.import("sys") {
                 if let Ok(modules) = sys.getattr("modules") {
                     if let Ok(module) = modules.get_item(self.name.as_str()) {
