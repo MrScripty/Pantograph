@@ -11,7 +11,7 @@ async fn actual_embedded_pytorch_inventory_preserves_gateway_and_cpu_candidates(
     let before = gateway.runtime_owned_device_candidates();
     let backend_before = gateway.current_backend_name().await;
     let observation = gateway.observe_pytorch_cuda_inventory().await;
-    pyo3::Python::with_gil(|py| {
+    pyo3::Python::attach(|py| {
         use pyo3::prelude::*;
         let torch = py.import("torch").unwrap();
         let version = torch

@@ -28,7 +28,7 @@ pub const TEXT_GENERATION_PACKAGES: [&str; 7] = [
 /// Returns a configuration error if Python metadata cannot be inspected. Only
 /// Python's `PackageNotFoundError` is treated as a missing distribution.
 pub fn observe_text_package_presence() -> Result<Vec<String>, BackendError> {
-    Python::with_gil(|py| observe_distributions(py, &TEXT_GENERATION_PACKAGES))
+    Python::attach(|py| observe_distributions(py, &TEXT_GENERATION_PACKAGES))
         .map_err(|_| BackendError::Config("embedded Python text package observation failed".into()))
 }
 
@@ -62,7 +62,7 @@ mod tests {
 
     #[test]
     fn linked_metadata_query_distinguishes_absence_from_observation_failure() {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             // Private module dictionary: no package imports, sys.path mutation,
             // process environment changes or shared metadata monkeypatching.
             let module = pyo3::types::PyModule::new(py, "text_metadata_fixture").unwrap();
@@ -82,7 +82,7 @@ mod tests {
     #[test]
     fn fixed_text_query_uses_linked_python_metadata() {
         let expected =
-            Python::with_gil(|py| observe_distributions(py, &TEXT_GENERATION_PACKAGES)).unwrap();
+            Python::attach(|py| observe_distributions(py, &TEXT_GENERATION_PACKAGES)).unwrap();
         assert_eq!(observe_text_package_presence().unwrap(), expected);
     }
 }

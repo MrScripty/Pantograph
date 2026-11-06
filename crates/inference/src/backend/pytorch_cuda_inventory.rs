@@ -65,7 +65,7 @@ impl PyTorchBackend {
     /// that API's lazy-initialization path. This flag is not proof of custody.
     pub async fn observe_cuda_inventory() -> PyTorchCudaInventory {
         tokio::task::spawn_blocking(|| {
-            Python::with_gil(|py| {
+            Python::attach(|py| {
                 let Ok(torch) = py.import("torch") else {
                     return unavailable(PyTorchCudaInventoryUnavailable::PythonProbeFailed);
                 };
@@ -208,7 +208,7 @@ cuda = Cuda()
     }
     #[test]
     fn cuda_inventory_observes_owner_ordinals_uuid_and_known_zero_without_promoting_capacity() {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let devices = facts(controlled(py, ""));
             assert_eq!(devices[0].device_id.as_str(), "cuda:0");
             assert_eq!(devices[1].device_id.as_str(), "cuda:1");
@@ -227,7 +227,7 @@ cuda = Cuda()
     }
     #[test]
     fn cuda_inventory_missing_malformed_or_duplicate_identity_stays_unavailable() {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             for settings in [
                 "cuda.uuids[0] = []",
                 "cuda.uuids[0] = [0]*16",
@@ -251,7 +251,7 @@ cuda = Cuda()
     }
     #[test]
     fn cuda_inventory_rejects_probe_errors_partial_enumeration_hip_and_unbounded_counts() {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             for (settings, reason) in [
                 (
                     "cuda.available = False",

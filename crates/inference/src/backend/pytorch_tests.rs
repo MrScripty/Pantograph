@@ -655,7 +655,7 @@ fn test_pytorch_worker_load_envelope_tolerates_additive_fields() {
 #[test]
 fn test_python_worker_contract_projects_task_profile_loader() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_contract_module(py);
         let envelope = serde_json::json!({
             "contract_version": PYTORCH_WORKER_CONTRACT_VERSION,
@@ -700,7 +700,7 @@ fn test_python_worker_contract_projects_task_profile_loader() {
 #[test]
 fn test_python_worker_contract_tolerates_additive_load_fields() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_contract_module(py);
         let envelope = serde_json::json!({
             "contract_version": PYTORCH_WORKER_CONTRACT_VERSION,
@@ -760,7 +760,7 @@ fn test_python_worker_contract_tolerates_additive_load_fields() {
 #[test]
 fn test_python_worker_contract_rejects_unsupported_task_profile_loader() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_contract_module(py);
         let envelope = serde_json::json!({
             "contract_version": PYTORCH_WORKER_CONTRACT_VERSION,
@@ -802,7 +802,7 @@ fn test_python_worker_contract_rejects_unsupported_task_profile_loader() {
 #[test]
 fn test_python_worker_contract_rejects_missing_load_entry_path() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_contract_module(py);
         let envelope = serde_json::json!({
             "contract_version": PYTORCH_WORKER_CONTRACT_VERSION,
@@ -840,7 +840,7 @@ fn test_python_worker_contract_rejects_missing_load_entry_path() {
 #[test]
 fn test_python_worker_load_value_error_after_projection_maps_to_model_load_failed() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_module_with_stubbed_dependencies(py);
         let patch = CString::new(
             r#"
@@ -897,7 +897,7 @@ module.load_model = fail_load_model
 #[test]
 fn test_python_worker_load_unexpected_loader_exception_maps_to_model_load_failed() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_module_with_stubbed_dependencies(py);
         let patch = CString::new(
             r#"
@@ -954,7 +954,7 @@ module.load_model = fail_load_model
 #[test]
 fn test_python_worker_load_invalid_loader_stays_invalid_request() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_module_with_stubbed_dependencies(py);
         let envelope = serde_json::json!({
             "request_id": "req-worker-load-invalid-loader",
@@ -1086,7 +1086,7 @@ fn test_pytorch_worker_generate_text_dllm_envelope_decodes_backend_local_control
 #[test]
 fn test_python_worker_contract_projects_dllm_generation_controls() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_contract_module(py);
         let fixture = include_str!(
             "../../tests/fixtures/pytorch_worker_contract/generate_text_dllm_request.json"
@@ -1121,7 +1121,7 @@ fn test_python_worker_contract_projects_dllm_generation_controls() {
 #[test]
 fn test_python_worker_contract_tolerates_additive_generate_fields() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_contract_module(py);
         let envelope = serde_json::json!({
             "contract_version": PYTORCH_WORKER_CONTRACT_VERSION,
@@ -1591,7 +1591,7 @@ fn test_pytorch_worker_truncate_kv_cache_envelope_rejects_empty_path() {
 #[test]
 fn test_python_worker_contract_projects_unload_envelope() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_contract_module(py);
         let fixture =
             include_str!("../../tests/fixtures/pytorch_worker_contract/unload_model_request.json");
@@ -1608,7 +1608,7 @@ fn test_python_worker_contract_projects_unload_envelope() {
 #[test]
 fn test_python_worker_contract_projects_init_envelope() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_contract_module(py);
         let fixture =
             include_str!("../../tests/fixtures/pytorch_worker_contract/init_worker_request.json");
@@ -1625,7 +1625,7 @@ fn test_python_worker_contract_projects_init_envelope() {
 #[test]
 fn test_python_worker_contract_projects_shutdown_envelope() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_contract_module(py);
         let fixture = include_str!(
             "../../tests/fixtures/pytorch_worker_contract/shutdown_worker_request.json"
@@ -1643,7 +1643,7 @@ fn test_python_worker_contract_projects_shutdown_envelope() {
 #[test]
 fn test_python_worker_shutdown_from_envelope_returns_structured_success() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_module_with_stubbed_dependencies(py);
         let fixture = include_str!(
             "../../tests/fixtures/pytorch_worker_contract/shutdown_worker_request.json"
@@ -1668,7 +1668,7 @@ fn test_python_worker_shutdown_from_envelope_returns_structured_success() {
 #[test]
 fn test_python_worker_response_helpers_emit_success_contract() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_contract_module(py);
         let locals = PyDict::new(py);
         locals
@@ -1714,7 +1714,7 @@ response_json = worker_contract.worker_success_response_json(
 #[test]
 fn test_python_worker_response_helpers_emit_error_contract() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_contract_module(py);
 
         let response_json = module
@@ -1752,7 +1752,7 @@ fn test_python_worker_response_helpers_emit_error_contract() {
 #[test]
 fn test_python_worker_contract_rejects_invalid_init_envelope() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_contract_module(py);
         let wrong_operation = serde_json::json!({
             "contract_version": PYTORCH_WORKER_CONTRACT_VERSION,
@@ -1795,7 +1795,7 @@ fn test_python_worker_contract_rejects_invalid_init_envelope() {
 #[test]
 fn test_python_worker_contract_rejects_invalid_shutdown_envelope() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_contract_module(py);
         let wrong_operation = serde_json::json!({
             "contract_version": PYTORCH_WORKER_CONTRACT_VERSION,
@@ -1838,7 +1838,7 @@ fn test_python_worker_contract_rejects_invalid_shutdown_envelope() {
 #[test]
 fn test_python_worker_contract_projects_get_loaded_info_envelope() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_contract_module(py);
         let fixture = include_str!(
             "../../tests/fixtures/pytorch_worker_contract/get_loaded_info_request.json"
@@ -1856,7 +1856,7 @@ fn test_python_worker_contract_projects_get_loaded_info_envelope() {
 #[test]
 fn test_python_worker_contract_rejects_invalid_get_loaded_info_envelope() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_contract_module(py);
         let wrong_operation = serde_json::json!({
             "contract_version": PYTORCH_WORKER_CONTRACT_VERSION,
@@ -1899,7 +1899,7 @@ fn test_python_worker_contract_rejects_invalid_get_loaded_info_envelope() {
 #[test]
 fn test_python_worker_contract_projects_clear_kv_cache_envelope() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_contract_module(py);
         let fixture = include_str!(
             "../../tests/fixtures/pytorch_worker_contract/clear_kv_cache_request.json"
@@ -1917,7 +1917,7 @@ fn test_python_worker_contract_projects_clear_kv_cache_envelope() {
 #[test]
 fn test_python_worker_contract_rejects_invalid_clear_kv_cache_envelope() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_contract_module(py);
         let wrong_operation = serde_json::json!({
             "contract_version": PYTORCH_WORKER_CONTRACT_VERSION,
@@ -1960,7 +1960,7 @@ fn test_python_worker_contract_rejects_invalid_clear_kv_cache_envelope() {
 #[test]
 fn test_python_worker_contract_projects_save_kv_cache_envelope() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_contract_module(py);
         let fixture =
             include_str!("../../tests/fixtures/pytorch_worker_contract/save_kv_cache_request.json");
@@ -1983,7 +1983,7 @@ fn test_python_worker_contract_projects_save_kv_cache_envelope() {
 #[test]
 fn test_python_worker_contract_rejects_invalid_save_kv_cache_envelope() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_contract_module(py);
         let wrong_operation = serde_json::json!({
             "contract_version": PYTORCH_WORKER_CONTRACT_VERSION,
@@ -2026,7 +2026,7 @@ fn test_python_worker_contract_rejects_invalid_save_kv_cache_envelope() {
 #[test]
 fn test_python_worker_contract_projects_restore_kv_cache_envelope() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_contract_module(py);
         let fixture = include_str!(
             "../../tests/fixtures/pytorch_worker_contract/restore_kv_cache_request.json"
@@ -2050,7 +2050,7 @@ fn test_python_worker_contract_projects_restore_kv_cache_envelope() {
 #[test]
 fn test_python_worker_contract_rejects_invalid_restore_kv_cache_envelope() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_contract_module(py);
         let wrong_operation = serde_json::json!({
             "contract_version": PYTORCH_WORKER_CONTRACT_VERSION,
@@ -2093,7 +2093,7 @@ fn test_python_worker_contract_rejects_invalid_restore_kv_cache_envelope() {
 #[test]
 fn test_python_worker_contract_projects_truncate_kv_cache_envelope() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_contract_module(py);
         let fixture = include_str!(
             "../../tests/fixtures/pytorch_worker_contract/truncate_kv_cache_request.json"
@@ -2125,7 +2125,7 @@ fn test_python_worker_contract_projects_truncate_kv_cache_envelope() {
 #[test]
 fn test_python_worker_contract_rejects_invalid_truncate_kv_cache_envelope() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_contract_module(py);
         let wrong_operation = serde_json::json!({
             "contract_version": PYTORCH_WORKER_CONTRACT_VERSION,
@@ -2168,7 +2168,7 @@ fn test_python_worker_contract_rejects_invalid_truncate_kv_cache_envelope() {
 #[test]
 fn test_python_worker_contract_rejects_invalid_unload_envelope() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_contract_module(py);
         let wrong_operation = serde_json::json!({
             "contract_version": PYTORCH_WORKER_CONTRACT_VERSION,
@@ -2292,7 +2292,7 @@ fn test_pytorch_worker_audio_transcription_envelope_tolerates_additive_fields() 
 #[test]
 fn test_python_worker_contract_projects_audio_transcription_fields() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_contract_module(py);
         let fixture = include_str!(
             "../../tests/fixtures/pytorch_worker_contract/audio_transcription_request.json"
@@ -2348,7 +2348,7 @@ fn test_python_worker_contract_projects_audio_transcription_fields() {
 #[test]
 fn test_python_worker_contract_tolerates_additive_audio_transcription_fields() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_contract_module(py);
         let envelope = serde_json::json!({
             "contract_version": PYTORCH_WORKER_CONTRACT_VERSION,
@@ -2384,7 +2384,7 @@ fn test_python_worker_contract_tolerates_additive_audio_transcription_fields() {
 #[test]
 fn test_python_worker_contract_rejects_audio_transcription_legacy_device() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_contract_module(py);
         let mut value: serde_json::Value = serde_json::from_str(include_str!(
             "../../tests/fixtures/pytorch_worker_contract/audio_transcription_request.json"
@@ -2407,7 +2407,7 @@ fn test_python_worker_contract_rejects_audio_transcription_legacy_device() {
 #[test]
 fn test_python_worker_contract_rejects_audio_transcription_auto_device_field() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_contract_module(py);
         let mut value: serde_json::Value = serde_json::from_str(include_str!(
             "../../tests/fixtures/pytorch_worker_contract/audio_transcription_request.json"
@@ -3030,7 +3030,7 @@ fn test_pytorch_generate_text_stream_envelope_rejects_policy_transformers_kwargs
 #[test]
 fn test_python_worker_contract_rejects_additive_backend_kwargs() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_contract_module(py);
         let envelope = serde_json::json!({
             "contract_version": PYTORCH_WORKER_CONTRACT_VERSION,
@@ -3913,7 +3913,7 @@ fn test_pytorch_worker_stream_token_extraction_error_normalizes_to_backend_error
 #[test]
 fn test_pytorch_worker_stream_token_accepts_string_chunk() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let token = pyo3::types::PyString::new(py, "hello");
         let chunk =
             PyTorchBackend::stream_chunk_from_python_token("req-stream-token", token.as_any())
@@ -3927,7 +3927,7 @@ fn test_pytorch_worker_stream_token_accepts_string_chunk() {
 #[test]
 fn test_pytorch_worker_stream_token_accepts_replace_dict_chunk() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let token = pyo3::types::PyDict::new(py);
         token.set_item("mode", "replace").expect("set mode");
         token.set_item("text", "final text").expect("set text");
@@ -3955,7 +3955,7 @@ fn test_pytorch_worker_stream_token_accepts_replace_dict_chunk() {
 #[test]
 fn test_pytorch_worker_stream_token_accepts_usage_only_dict_chunk() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let token = pyo3::types::PyDict::new(py);
         let usage = pyo3::types::PyDict::new(py);
         usage.set_item("prompt_tokens", 7).expect("set prompt");
@@ -3981,7 +3981,7 @@ fn test_pytorch_worker_stream_token_accepts_usage_only_dict_chunk() {
 #[test]
 fn test_pytorch_worker_stream_token_bounds_usage_counts() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let token = pyo3::types::PyDict::new(py);
         let usage = pyo3::types::PyDict::new(py);
         usage.set_item("prompt_tokens", 2).expect("set prompt");
@@ -4007,7 +4007,7 @@ fn test_pytorch_worker_stream_token_bounds_usage_counts() {
 #[test]
 fn test_pytorch_worker_stream_token_rejects_dict_without_text_or_usage() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let token = pyo3::types::PyDict::new(py);
         token.set_item("mode", "replace").expect("set mode");
 
@@ -6231,7 +6231,7 @@ impl TextIteratorBarrier {
             .unwrap()
             .send(())
             .unwrap();
-        py.allow_threads(|| self.release.lock().unwrap().recv().unwrap());
+        py.detach(|| self.release.lock().unwrap().recv().unwrap());
     }
 }
 
@@ -6250,7 +6250,7 @@ async fn production_text_iterator_drains_before_successful_load_and_unload() {
     ] {
         let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
         let (release_tx, release_rx) = std::sync::mpsc::channel();
-        let saved = Python::with_gil(|py| {
+        let saved = Python::attach(|py| {
             load_worker_module_with_stubbed_dependencies(py);
             py.run(c"import sys, types
 sys.modules['torch'].no_grad = lambda: (lambda f: f)\nsys.modules['torch.nn'] = types.SimpleNamespace(functional=types.SimpleNamespace())
@@ -6334,7 +6334,7 @@ def shutdown_worker_from_envelope(envelope):
                         .await;
                 }
             }
-            Python::with_gil(|py| {
+            Python::attach(|py| {
                 let worker = super::pytorch_worker::worker_module(py).unwrap();
                 for (name, value) in saved {
                     worker.setattr(name, value).unwrap();
@@ -6361,7 +6361,7 @@ def shutdown_worker_from_envelope(envelope):
         };
         tokio::pin!(operation);
         assert!(operation.as_mut().now_or_never().is_none());
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let worker = super::pytorch_worker::worker_module(py).unwrap();
             assert!(worker
                 .getattr("_rt03_effects")
@@ -6384,7 +6384,7 @@ def shutdown_worker_from_envelope(envelope):
             );
             assert!(stream.next().await.unwrap().unwrap().done);
         }
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let worker = super::pytorch_worker::worker_module(py).unwrap();
             assert_eq!(
                 worker
@@ -6415,7 +6415,7 @@ async fn assert_failed_text_cleanup_retries(
         device: inference_device_id("cpu"),
     });
     backend.resident_allocation_uncertain = true;
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         super::pytorch_worker::worker_module(py)
             .unwrap()
             .setattr("_rt03_fail_text", true)
@@ -6440,7 +6440,7 @@ async fn assert_failed_text_cleanup_retries(
     assert!(backend.ready);
     assert!(backend.loaded_model.is_some());
     assert!(backend.resident_allocation_uncertain);
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let effects = super::pytorch_worker::worker_module(py)
             .unwrap()
             .getattr("_rt03_effects")
@@ -6460,7 +6460,7 @@ async fn assert_failed_text_cleanup_retries(
     }
     assert!(backend.loaded_model.is_none());
     assert!(!backend.resident_allocation_uncertain);
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let effects = super::pytorch_worker::worker_module(py)
             .unwrap()
             .getattr("_rt03_effects")
@@ -6486,7 +6486,7 @@ async fn assert_failed_text_restart_preserves_residency(
     };
     gateway.start(&original).await.unwrap();
     let previous = gateway.runtime_lifecycle_snapshot().await;
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         super::pytorch_worker::worker_module(py)
             .unwrap()
             .setattr("_rt03_fail_text", true)
@@ -6534,7 +6534,7 @@ async fn assert_failed_text_restart_preserves_residency(
         .last_error
         .unwrap()
         .contains("controlled text producer failure"));
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let effects = super::pytorch_worker::worker_module(py)
             .unwrap()
             .getattr("_rt03_effects")
@@ -6582,7 +6582,7 @@ async fn assert_effectful_load_failure_clears_residency(backend: PyTorchBackend)
     };
     gateway.start(&original).await.unwrap();
     assert!(gateway.runtime_lifecycle_snapshot().await.active);
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         super::pytorch_worker::worker_module(py)
             .unwrap()
             .setattr("_rt03_fail_load", true)
@@ -6606,7 +6606,7 @@ async fn assert_effectful_load_failure_clears_residency(backend: PyTorchBackend)
         .last_error
         .unwrap()
         .contains("controlled replacement load failure"));
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let effects = super::pytorch_worker::worker_module(py)
             .unwrap()
             .getattr("_rt03_effects")
@@ -6623,7 +6623,7 @@ async fn assert_effectful_load_failure_clears_residency(backend: PyTorchBackend)
             .allocation_state,
         crate::resident_lifecycle::ResidentAllocationState::Unknown
     );
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         super::pytorch_worker::worker_module(py)
             .unwrap()
             .setattr("_rt03_fail_stop", true)
@@ -6638,7 +6638,7 @@ async fn assert_effectful_load_failure_clears_residency(backend: PyTorchBackend)
             .allocation_state,
         crate::resident_lifecycle::ResidentAllocationState::Unknown
     );
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         super::pytorch_worker::worker_module(py)
             .unwrap()
             .setattr("_rt03_fail_stop", false)
@@ -6653,7 +6653,7 @@ async fn assert_effectful_load_failure_clears_residency(backend: PyTorchBackend)
             .allocation_state,
         crate::resident_lifecycle::ResidentAllocationState::Released
     );
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let effects = super::pytorch_worker::worker_module(py)
             .unwrap()
             .getattr("_rt03_effects")
@@ -6708,7 +6708,7 @@ async fn selected_text_production_loader_and_worker_retain_selection_until_termi
         let selected_device = decision.selected_device_id.as_ref().unwrap().to_string();
         let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
         let (release_tx, release_rx) = std::sync::mpsc::channel();
-        let saved = Python::with_gil(|py| {
+        let saved = Python::attach(|py| {
             load_worker_module_with_stubbed_dependencies(py);
             py.run(c"import sys, types
 sys.modules['torch'].no_grad = lambda: (lambda f: f)
@@ -6794,7 +6794,7 @@ def shutdown_worker_from_envelope(envelope):
             result = &mut operation => panic!("completed before worker barrier: {result:?}"),
             entered = entered_rx => entered.unwrap(),
         }
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let worker = super::pytorch_worker::worker_module(py).unwrap();
             let load_json: String = worker
                 .getattr("json")
@@ -6865,7 +6865,7 @@ def shutdown_worker_from_envelope(envelope):
         // The selected execution already joined and reported its failed job.
         // Replacement must reach shutdown instead of replaying that old error.
         replacement.await.unwrap();
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let worker = super::pytorch_worker::worker_module(py).unwrap();
             assert_eq!(
                 worker
@@ -7388,7 +7388,7 @@ async fn selected_audio_actual_python_loader_projects_chunk_and_closed_policy_to
     let envelope = PyTorchBackend::selected_audio_load_envelope(&request, &target, &decision)
         .await
         .unwrap();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_module_with_stubbed_dependencies(py);
         let contract = load_worker_contract_module(py);
         module
@@ -7514,7 +7514,7 @@ async fn selected_audio_production_load_forward_jobs_hold_custody_through_cancel
             let (release_tx, release_rx) = std::sync::mpsc::channel();
             let backend = PyTorchBackend::new();
             let worker_handle = backend.selected_audio_worker.clone();
-            let saved = Python::with_gil(|py| {
+            let saved = Python::attach(|py| {
                 let worker = prepare_selected_audio_worker(py, &worker_handle);
                 let saved = [
                     "load_transformers_model_from_envelope",
@@ -7583,7 +7583,7 @@ async fn selected_audio_production_load_forward_jobs_hold_custody_through_cancel
                     .is_err(),
                 "{phase}:{mode}"
             );
-            Python::with_gil(|py| {
+            Python::attach(|py| {
                 let worker = worker_handle.module(py).unwrap();
                 let load: serde_json::Value = serde_json::from_str(
                     &worker
@@ -7645,7 +7645,7 @@ async fn selected_audio_production_load_forward_jobs_hold_custody_through_cancel
             tokio::time::timeout(std::time::Duration::from_secs(2), gateway.is_ready())
                 .await
                 .unwrap();
-            Python::with_gil(|py| {
+            Python::attach(|py| {
                 let worker = worker_handle.module(py).unwrap();
                 let effects = worker
                     .getattr("_audio_effects")
@@ -7676,7 +7676,7 @@ async fn selected_audio_production_cache_fences_revision_content_chunk_and_gener
         crate::selected_audio_execution::fixture();
     let mut backend = PyTorchBackend::new();
     let worker_handle = backend.selected_audio_worker.clone();
-    let saved = Python::with_gil(|py| {
+    let saved = Python::attach(|py| {
         let worker = prepare_selected_audio_worker(py, &worker_handle);
         let saved = [
             "load_transformers_model_from_envelope",
@@ -7761,7 +7761,7 @@ async fn selected_audio_production_cache_fences_revision_content_chunk_and_gener
             .runtime_reused,
         Some(false)
     );
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         worker_handle
             .module(py)
             .unwrap()
@@ -7775,7 +7775,7 @@ async fn selected_audio_production_cache_fences_revision_content_chunk_and_gener
         .unwrap_err()
         .to_string()
         .contains("unacknowledged ASR shutdown"));
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let worker = worker_handle.module(py).unwrap();
         let effects = worker
             .getattr("_audio_effects")
@@ -7801,7 +7801,7 @@ async fn selected_audio_two_live_owners_isolate_cache_custody_stop_and_module_re
         let worker_b = backend_b.selected_audio_worker.clone();
         let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
         let (release_tx, release_rx) = std::sync::mpsc::channel();
-        let (name_a, name_b, generic_shutdown) = Python::with_gil(|py| {
+        let (name_a, name_b, generic_shutdown) = Python::attach(|py| {
             let a = prepare_selected_audio_worker(py, &worker_a);
             let b = prepare_selected_audio_worker(py, &worker_b);
             assert!(!a.is(&b));
@@ -7911,7 +7911,7 @@ async fn selected_audio_two_live_owners_isolate_cache_custody_stop_and_module_re
                 .await
                 .is_err()
         );
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let a = worker_a.module(py).unwrap();
             let effects = a
                 .getattr("_audio_effects")
@@ -7929,7 +7929,7 @@ async fn selected_audio_two_live_owners_isolate_cache_custody_stop_and_module_re
         });
         release_tx.send(()).unwrap();
         caller.await.unwrap().unwrap();
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             worker_a
                 .module(py)
                 .unwrap()
@@ -7949,7 +7949,7 @@ async fn selected_audio_two_live_owners_isolate_cache_custody_stop_and_module_re
             gateway.runtime_lifecycle_snapshot().await.runtime_reused,
             Some(true)
         );
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let a = worker_a.module(py).unwrap();
             let load = a.getattr("_audio_load").unwrap();
             assert_eq!(
@@ -7979,7 +7979,7 @@ async fn selected_audio_two_live_owners_isolate_cache_custody_stop_and_module_re
         drop(backend_b);
         drop(worker_a);
         drop(worker_b);
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let modules = py.import("sys").unwrap().getattr("modules").unwrap();
             assert!(!modules.contains(name_a).unwrap());
             assert!(!modules.contains(name_b).unwrap());
@@ -8038,7 +8038,7 @@ async fn owned_audio_production_pybytes_jobs_retain_snapshot_through_caller_loss
             let worker_handle = backend.selected_audio_worker.clone();
             let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
             let (release_tx, release_rx) = std::sync::mpsc::channel();
-            Python::with_gil(|py| {
+            Python::attach(|py| {
                 let worker = prepare_selected_audio_worker(py, &worker_handle);
                 patch_selected_audio_worker(py, &worker);
                 py.run(
@@ -8114,7 +8114,7 @@ def transcribe_owned_wav_from_envelope(envelope, wav_bytes, metadata):
                     .is_err()
             );
             if phase == "forward" {
-                Python::with_gil(|py| {
+                Python::attach(|py| {
                     let worker = worker_handle.module(py).unwrap();
                     let meta: serde_json::Value = serde_json::from_str(
                         &worker
@@ -8172,7 +8172,7 @@ def transcribe_owned_wav_from_envelope(envelope, wav_bytes, metadata):
                 weak.upgrade().is_none(),
                 "snapshot released after actual completion"
             );
-            Python::with_gil(|py| {
+            Python::attach(|py| {
                 worker_handle
                     .module(py)
                     .unwrap()
@@ -8192,7 +8192,7 @@ async fn selected_to_direct_audio_cleanup(caller_abort: bool) {
     let private = backend.selected_audio_worker.clone();
     let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
     let (release_tx, release_rx) = std::sync::mpsc::channel();
-    let (generic, saved_private, saved_generic) = Python::with_gil(|py| {
+    let (generic, saved_private, saved_generic) = Python::attach(|py| {
         let worker = prepare_selected_audio_worker(py, &private);
         let save = |module: &Bound<'_, pyo3::types::PyModule>, names: &[&'static str]| {
             names
@@ -8286,7 +8286,7 @@ def shutdown_worker_from_envelope(envelope):
         selected,
         crate::InferenceExecutionResult::AudioTranscription { .. }
     ));
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         assert!(
             generic
                 .bind(py)
@@ -8338,7 +8338,7 @@ def shutdown_worker_from_envelope(envelope):
             "direct fixture transcript"
         );
         // An unacknowledged generic shutdown must retain ownership for retry.
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             generic.bind(py).setattr("_direct_fail_stop", true).unwrap();
         });
         assert!(
@@ -8354,7 +8354,7 @@ def shutdown_worker_from_envelope(envelope):
             crate::resident_lifecycle::ResidentAllocationState::Released,
             "failed shutdown must not publish confirmed release"
         );
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             assert!(!generic.bind(py).getattr("_asr_pipeline").unwrap().is_none());
             generic
                 .bind(py)
@@ -8372,7 +8372,7 @@ def shutdown_worker_from_envelope(envelope):
             .allocation_state,
         crate::resident_lifecycle::ResidentAllocationState::Released
     );
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let worker = generic.bind(py);
         assert!(
             worker.getattr("_asr_pipeline").unwrap().is_none(),

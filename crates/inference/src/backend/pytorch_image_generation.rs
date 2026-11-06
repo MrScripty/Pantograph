@@ -44,7 +44,7 @@ impl PyTorchBackend {
         reject_cancelled_image_generation(&context)?;
 
         tokio::task::spawn_blocking(move || {
-            Python::with_gil(|py| -> Result<ImageGenerationResult, BackendError> {
+            Python::attach(|py| -> Result<ImageGenerationResult, BackendError> {
                 let worker = pytorch_worker::worker_module(py).map_err(|error| {
                     image_worker_failure_from_message(
                         &request_id,
@@ -107,7 +107,7 @@ impl PyTorchBackend {
 
         let batch_execution_id = request.batch_execution_id.clone();
         tokio::task::spawn_blocking(move || {
-            Python::with_gil(
+            Python::attach(
                 |py| -> Result<ImageGenerationBatchExecutionResponse, BackendError> {
                     let worker = pytorch_worker::worker_module(py).map_err(|error| {
                         image_worker_failure_from_message(

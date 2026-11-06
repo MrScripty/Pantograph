@@ -42,10 +42,12 @@ fn extract_zip_archive(archive_path: &Path, destination: &Path) -> Result<(), St
         let mut entry = archive
             .by_index(index)
             .map_err(|e| format!("Failed to read zip entry: {}", e))?;
-        let relative_path = entry
-            .enclosed_name()
-            .map(|path| path.to_path_buf())
-            .ok_or_else(|| format!("Archive entry has invalid path: {}", entry.name()))?;
+        let relative_path = entry.enclosed_name().ok_or_else(|| {
+            format!(
+                "Archive entry has invalid path: {}",
+                zip_entry_label(&entry)
+            )
+        })?;
         let output_path = validated_output_path(destination, &relative_path)?;
 
         if entry.is_dir() {
@@ -67,7 +69,7 @@ fn extract_zip_archive(archive_path: &Path, destination: &Path) -> Result<(), St
                 .map_err(|e| format!("Failed to read symlink target: {}", e))?;
             let target_path = Path::new(target.trim())
                 .file_name()
-                .ok_or_else(|| format!("Invalid symlink target in {}", entry.name()))?;
+                .ok_or_else(|| format!("Invalid symlink target in {}", zip_entry_label(&entry)))?;
             std::os::unix::fs::symlink(target_path, &output_path)
                 .map_err(|e| format!("Failed to create symlink {:?}: {}", output_path, e))?;
             continue;
@@ -129,8 +131,13 @@ fn validated_output_path(destination: &Path, relative_path: &Path) -> Result<Pat
     Ok(destination.join(relative_path))
 }
 
+/// Names entries in errors without failing on names that do not decode.
+fn zip_entry_label<R: Read + ?Sized>(entry: &zip::read::ZipFile<'_, R>) -> String {
+    String::from_utf8_lossy(entry.name_raw()).into_owned()
+}
+
 #[cfg(unix)]
-fn zip_entry_is_symlink(entry: &zip::read::ZipFile<'_>) -> bool {
+fn zip_entry_is_symlink<R: Read + ?Sized>(entry: &zip::read::ZipFile<'_, R>) -> bool {
     entry
         .unix_mode()
         .map(|mode| (mode & 0o170000) == 0o120000)
@@ -139,7 +146,7 @@ fn zip_entry_is_symlink(entry: &zip::read::ZipFile<'_>) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::validated_output_path;
+    use super::{extract_zip_archive, validated_output_path};
     use std::path::Path;
 
     #[test]
@@ -156,5 +163,45 @@ mod tests {
             .expect_err("parent dir should be rejected");
 
         assert!(error.contains("escapes extraction root"));
+    }
+
+    fn write_zip(path: &Path, entries: &[(&str, &[u8])]) {
+        let mut writer = zip::ZipWriter::new(std::fs::File::create(path).expect("create zip"));
+        for (name, contents) in entries {
+            writer
+                .start_file(*name, zip::write::SimpleFileOptions::default())
+                .expect("start zip entry");
+            std::io::Write::write_all(&mut writer, contents).expect("write zip entry");
+        }
+        writer.finish().expect("finish zip");
+    }
+
+    #[test]
+    fn extract_zip_archive_writes_nested_entries() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let archive = temp.path().join("runtime.zip");
+        write_zip(&archive, &[("bin/server", b"binary"), ("README", b"notes")]);
+        let destination = temp.path().join("out");
+
+        extract_zip_archive(&archive, &destination).expect("extract zip");
+
+        assert_eq!(
+            std::fs::read(destination.join("bin/server")).unwrap(),
+            b"binary"
+        );
+        assert_eq!(std::fs::read(destination.join("README")).unwrap(), b"notes");
+    }
+
+    #[test]
+    fn extract_zip_archive_rejects_entries_outside_the_destination() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let archive = temp.path().join("runtime.zip");
+        write_zip(&archive, &[("../escape", b"payload")]);
+        let destination = temp.path().join("out");
+
+        let error = extract_zip_archive(&archive, &destination).expect_err("escape rejected");
+
+        assert!(error.contains("invalid path: ../escape"), "{error}");
+        assert!(!temp.path().join("escape").exists());
     }
 }

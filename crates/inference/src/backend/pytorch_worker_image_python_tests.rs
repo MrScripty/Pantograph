@@ -197,7 +197,7 @@ def load_diffusion_model(path, device=None, torch_dtype=None):
 #[test]
 fn test_python_worker_generate_image_batch_from_envelope_returns_worker_response() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_module_with_image_stubs(py);
         attach_stub_diffusion_pipeline(&module);
 
@@ -264,7 +264,7 @@ fn test_python_worker_generate_image_batch_from_envelope_returns_worker_response
 #[test]
 fn image_count_batch_partitions_images_and_expands_seed_generators_in_member_order() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_module_with_image_stubs(py);
         attach_stub_diffusion_pipeline(&module);
         let mut envelope: serde_json::Value = serde_json::from_str(include_str!(
@@ -350,7 +350,7 @@ worker._diffusion_pipeline.__class__.__call__ = marked_images
 #[test]
 fn test_python_worker_generate_image_from_envelope_returns_worker_response() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_module_with_image_stubs(py);
         attach_stub_diffusion_pipeline(&module);
 
@@ -386,7 +386,7 @@ fn test_python_worker_generate_image_from_envelope_returns_worker_response() {
 #[test]
 fn graph_guidance_option_reaches_actual_worker_pipeline_call_without_default_override() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_module_with_image_stubs(py);
         attach_stub_diffusion_pipeline(&module);
         for guidance in [None, Some(-1.0), Some(0.0), Some(1.0), Some(7.5)] {
@@ -438,7 +438,7 @@ fn graph_guidance_option_reaches_actual_worker_pipeline_call_without_default_ove
 #[test]
 fn test_python_worker_generate_image_from_envelope_reports_cuda_peak_vram() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_module_with_image_stubs(py);
         attach_stub_diffusion_pipeline(&module);
         let locals = PyDict::new(py);
@@ -498,7 +498,7 @@ worker.torch.cuda = _Cuda()
 #[test]
 fn test_python_worker_generate_image_from_envelope_reports_mps_metric_unimplemented() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_module_with_image_stubs(py);
         attach_stub_diffusion_pipeline(&module);
         let locals = PyDict::new(py);
@@ -551,7 +551,7 @@ worker.torch.backends = types.SimpleNamespace(
 #[test]
 fn test_python_worker_generate_image_from_envelope_reports_oom_failure() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_module_with_image_stubs(py);
         attach_stub_diffusion_pipeline(&module);
         let locals = PyDict::new(py);
@@ -598,7 +598,7 @@ worker._diffusion_pipeline = _FailingPipeline()
 #[test]
 fn scheduler_worker_envelopes_use_closed_choices_and_preserve_resident_default() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_module_with_image_stubs(py);
         attach_stub_diffusion_pipeline(&module);
         let pipeline = module.getattr("_diffusion_pipeline").unwrap();
@@ -673,7 +673,7 @@ fn scheduler_worker_envelopes_use_closed_choices_and_preserve_resident_default()
 #[test]
 fn test_python_worker_generate_image_from_envelope_rejects_unsupported_denoising_scheduler() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_module_with_image_stubs(py);
         attach_stub_diffusion_pipeline(&module);
         let mut envelope: serde_json::Value = serde_json::from_str(include_str!(
@@ -706,7 +706,7 @@ fn test_python_worker_generate_image_from_envelope_rejects_unsupported_denoising
 #[test]
 fn test_python_worker_generate_image_from_envelope_rejects_unplanned_fields() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_module_with_image_stubs(py);
         attach_stub_diffusion_pipeline(&module);
         let mut envelope: serde_json::Value = serde_json::from_str(include_str!(
@@ -739,7 +739,7 @@ fn test_python_worker_generate_image_from_envelope_rejects_unplanned_fields() {
 #[test]
 fn test_python_worker_real_diffusion_loader_enforces_closed_bundle_admission() {
     let _python_fixture = super::PYTHON_TEST_LOCK.blocking_lock();
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         let module = load_worker_module_with_image_stubs(py);
         let locals = PyDict::new(py);
         locals.set_item("worker", &module).unwrap();
