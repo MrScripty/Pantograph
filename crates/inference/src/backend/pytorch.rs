@@ -1869,14 +1869,12 @@ impl PyTorchBackend {
         request_id: &str,
         usage_obj: &Bound<'_, PyAny>,
     ) -> Result<Option<InferenceUsage>, BackendError> {
-        let usage_dict = usage_obj
-            .cast::<pyo3::types::PyDict>()
-            .map_err(|error| {
-                Self::stream_worker_failure_from_message(
-                    request_id,
-                    format!("Token usage extraction failed: {}", error),
-                )
-            })?;
+        let usage_dict = usage_obj.cast::<pyo3::types::PyDict>().map_err(|error| {
+            Self::stream_worker_failure_from_message(
+                request_id,
+                format!("Token usage extraction failed: {}", error),
+            )
+        })?;
         let usage = InferenceUsage {
             prompt_tokens: Self::stream_usage_u32_field(request_id, usage_dict, "prompt_tokens")?,
             completion_tokens: Self::stream_usage_u32_field(
